@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useSyncExternalStore } from "react";
-import Link from "next/link";
+import { useEffect, useState } from "react";
 import { BrowserRouter, useNavigate, useRoutes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18nSync } from "@/i18n";
@@ -23,8 +22,6 @@ const queryClient = new QueryClient({
     queries: { staleTime: 30_000, retry: 1 },
   },
 });
-
-const emptySubscribe = () => () => {};
 
 function StaffShortcutListener() {
   const navigate = useNavigate();
@@ -63,38 +60,10 @@ function AppRoutes() {
   ]);
 }
 
-function SsrShellFallback() {
-  return (
-    <main id="main" className="mx-auto max-w-xl space-y-6 px-4 pb-28 pt-10">
-      <header className="space-y-3">
-        <p className="text-sm font-medium text-[var(--ai)]">CivicResolve · Google Gemini AI</p>
-        <h1 className="text-3xl font-semibold">See a problem? Report it.</h1>
-        <p className="text-lg text-[var(--ink-2)]">
-          Take a photo, tell us where it is, and AI classifies urgency and routes it to the right municipal department.
-        </p>
-        <div className="pt-2">
-          <Link
-            href="/report"
-            className="inline-flex min-h-12 items-center justify-center rounded-xl bg-[var(--ink)] px-6 text-base font-medium text-white"
-          >
-            Report a problem
-          </Link>
-        </div>
-      </header>
-    </main>
-  );
-}
-
 export default function CatchAllPage() {
-  const isClient = useSyncExternalStore(
-    emptySubscribe,
-    () => true,
-    () => false
-  );
-
-  if (!isClient) {
-    return <SsrShellFallback />;
-  }
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
 
   return (
     <QueryClientProvider client={queryClient}>

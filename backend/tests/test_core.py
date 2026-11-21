@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-
 import pytest
 from fastapi import HTTPException
 from PIL import Image

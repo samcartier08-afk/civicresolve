@@ -79,10 +79,10 @@ class CivicIncident(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    reports: Mapped[list["CitizenReport"]] = relationship(
+    reports: Mapped[list[CitizenReport]] = relationship(
         back_populates="incident", lazy="selectin"
     )
-    status_history: Mapped[list["StatusHistory"]] = relationship(
+    status_history: Mapped[list[StatusHistory]] = relationship(
         back_populates="incident", lazy="selectin", order_by="StatusHistory.created_at"
     )
 

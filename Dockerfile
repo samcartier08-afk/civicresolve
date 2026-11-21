@@ -12,14 +12,6 @@ RUN npm ci
 # 2. Build standalone Next.js bundle
 FROM base AS builder
 ENV NEXT_OUTPUT_STANDALONE=true
-ARG NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyBLLxm93m4Rdo4EOL1pgm4yAg_RwvIA1q0
-ARG NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=civil-50461.firebaseapp.com
-ARG NEXT_PUBLIC_FIREBASE_PROJECT_ID=civil-50461
-ARG NEXT_PUBLIC_FIREBASE_APP_ID=1:402083674529:web:440692816b554f22d0b3e0
-ENV NEXT_PUBLIC_FIREBASE_API_KEY=$NEXT_PUBLIC_FIREBASE_API_KEY \
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN \
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID \
-    NEXT_PUBLIC_FIREBASE_APP_ID=$NEXT_PUBLIC_FIREBASE_APP_ID
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build
@@ -33,7 +25,6 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs \
   && adduser --system --uid 1001 nextjs
 
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 

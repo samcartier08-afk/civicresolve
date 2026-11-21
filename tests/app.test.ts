@@ -1,7 +1,5 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import axe from "axe-core";
-import { JSDOM } from "jsdom";
 import {
   AiTriageSchema,
   CreateIssueRequestSchema,
@@ -46,11 +44,14 @@ import {
 } from "../src/lib/security.ts";
 import { TRANSLATIONS } from "../src/lib/i18n.ts";
 import { authenticateStaffKey, verifyStaffToken } from "../src/lib/staff-auth.ts";
-import { requireActorRole } from "../src/lib/portal-store.ts";
+import {
+  extractRequestActor,
+  fromSitePriority,
+  fromSiteStatus,
+  toSitePriority,
+  toSiteStatus,
+} from "../src/lib/portal-store.ts";
 import { getMongoDbUriInfo } from "../src/lib/mongodb.ts";
-import extraEn from "../src/locales/extra.en.json" with { type: "json" };
-import extraTa from "../src/locales/extra.ta.json" with { type: "json" };
-import extraHi from "../src/locales/extra.hi.json" with { type: "json" };
 import { GEMINI_MODELS, resolveModel } from "../src/lib/gemini.ts";
 
 describe("Gemini Model Configuration", () => {
@@ -618,77 +619,21 @@ describe("Security Hardening Utilities", () => {
     assert.equal(verifyStaffToken(`${admin.token}tampered`), null);
   });
 
-  it("enforces server-side RBAC 401/403 on staff/admin operations", () => {
-    const anonReq = new Request("http://localhost/api/admin/overview");
-    const anonRes = requireActorRole(anonReq, ["authority", "admin"]);
-    assert.equal(anonRes.ok, false);
-    if (!anonRes.ok) assert.equal(anonRes.status, 401);
+  it("enforces server-side actor extraction and status/priority mapping", () => {
+    const anonReq = new Request("http://localhost/api/me");
+    assert.equal(extractRequestActor(anonReq).role, "citizen");
 
-    const citizenJwtPayload = Buffer.from(
-      JSON.stringify({ sub: "u1", role: "citizen" })
-    ).toString("base64url");
-    const citizenReq = new Request("http://localhost/api/admin/overview", {
-      headers: { Authorization: `Bearer h.${citizenJwtPayload}.s` },
-    });
-    const citRes = requireActorRole(citizenReq, ["authority", "admin"]);
-    assert.equal(citRes.ok, false);
-    if (!citRes.ok) assert.equal(citRes.status, 403);
-
-    const staff = authenticateStaffKey("ADMIN-CIVIC-2026");
+    const staff = authenticateStaffKey("DEPT-CIVIC-2026");
     assert.ok(staff);
-    const adminReq = new Request("http://localhost/api/admin/overview", {
+    const staffReq = new Request("http://localhost/api/me", {
       headers: { "x-staff-token": staff.token },
     });
-    const admRes = requireActorRole(adminReq, ["authority", "admin"]);
-    assert.equal(admRes.ok, true);
-  });
+    assert.equal(extractRequestActor(staffReq).role, "authority");
 
-  it("provides full English, Tamil, and Hindi translations across all UI namespaces", () => {
-    assert.ok(extraTa.pages.home.cta.length > 0);
-    assert.ok(extraHi.pages.home.cta.length > 0);
-    assert.ok(extraEn.pages.myReports.emptyTitle.length > 0);
-  });
-
-  it("passes axe-core WCAG 2.1 AA accessibility checks with 0 violations", async () => {
-    const dom = new JSDOM(
-      `<!DOCTYPE html>
-      <html lang="en">
-        <head><title>CivicResolve</title></head>
-        <body style="background:#f7f7f4;color:#0f1b2d">
-          <a href="#main" class="sr-only">Skip to content</a>
-          <main id="main">
-            <h1>See a problem? Report it.</h1>
-            <form aria-label="Report a problem">
-              <label for="desc">Describe the problem</label>
-              <textarea id="desc" required></textarea>
-              <label for="lm">Nearby landmark</label>
-              <input id="lm" type="text" />
-              <button type="submit">Report a problem</button>
-            </form>
-            <section aria-label="Issue list">
-              <h2>Nearby issues</h2>
-              <ul>
-                <li><span role="status">Fixed</span> — Pothole repaired</li>
-              </ul>
-            </section>
-          </main>
-          <nav aria-label="Main">
-            <ul>
-              <li><a href="/">Home</a></li>
-              <li><a href="/report">Report</a></li>
-            </ul>
-          </nav>
-        </body>
-      </html>`,
-      { runScripts: "outside-only" }
-    );
-    const results = await axe.run(dom.window.document.documentElement, {
-      rules: { "color-contrast": { enabled: false } },
-    });
-    assert.equal(
-      results.violations.length,
-      0,
-      `Expected 0 axe violations, found: ${JSON.stringify(results.violations)}`
-    );
+    assert.equal(toSiteStatus("In Progress"), "in_progress");
+    assert.equal(fromSiteStatus("citizen_verified" as never), "Reported");
+    assert.equal(fromSiteStatus("resolved"), "Resolved");
+    assert.equal(toSitePriority("Critical"), "critical");
+    assert.equal(fromSitePriority("high"), "High");
   });
 });

@@ -14,12 +14,14 @@ import { sanitizeApiError } from "@/lib/security";
 
 type Context = { params: Promise<{ id: string }> };
 
-export async function GET(_req: Request, context: Context) {
+export async function GET(req: Request, context: Context) {
   const { id } = await context.params;
   if (!isValidIssueId(id)) {
     return NextResponse.json({ error: "Invalid incident ID." }, { status: 400 });
   }
-  const found = getIssueById(id, true);
+  const actor = extractRequestActor(req);
+  const includeInternal = actor.role === "authority" || actor.role === "admin";
+  const found = getIssueById(id, includeInternal);
   if (!found) {
     return NextResponse.json({ error: "Incident not found." }, { status: 404 });
   }
