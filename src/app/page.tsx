@@ -3,14 +3,19 @@
 import "@/lib/i18n-init";
 import { useCallback, useEffect, useState } from "react";
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AuthProvider } from "@/auth/AuthProvider";
 import { CitizenShell } from "@/components/layout/CitizenShell";
 import { ReportWizard, type ReportInput } from "@/views/citizen/ReportWizard";
 import { IncidentQueue, type IncidentRow } from "@/components/authority/IncidentQueue";
 import { AdminOverview, type Kpis } from "@/views/admin/AdminOverview";
+import { AuthPage } from "@/views/auth/AuthPage";
 import type { DeptWorkload } from "@/components/admin/WorkloadChart";
 import type { PriorityKey, StatusKey } from "@/components/ui/StatusPill";
 import type { CivicIssue, IssueStats } from "@/lib/civic-schemas";
 import { Button } from "@/components/ui/Button";
+
+const queryClient = new QueryClient();
 
 function toStatusKey(status: string): StatusKey {
   const map: Record<string, StatusKey> = {
@@ -223,6 +228,8 @@ function CivicResolveRouterApp() {
           }
         />
       </Route>
+      <Route path="/login" element={<AuthPage mode="login" />} />
+      <Route path="/register" element={<AuthPage mode="register" />} />
     </Routes>
   );
 }
@@ -233,8 +240,12 @@ export default function Page() {
   if (!mounted) return null;
 
   return (
-    <MemoryRouter initialEntries={["/report"]}>
-      <CivicResolveRouterApp />
-    </MemoryRouter>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <MemoryRouter initialEntries={["/report"]}>
+          <CivicResolveRouterApp />
+        </MemoryRouter>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

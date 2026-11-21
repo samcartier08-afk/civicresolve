@@ -1,0 +1,29 @@
+{
+  "auth": {
+    "signIn": "Sign in", "register": "Create account", "name": "Full name", "email": "Email", "password": "Password",
+    "passwordHint": "At least 8 characters.", "google": "Continue with Google", "or": "or", "forgot": "Forgot password?",
+    "resetSent": "If {{email}} has an account, we've sent a reset link. Check your inbox.",
+    "haveAccount": "Already have an account?", "noAccount": "New here?",
+    "subtitleLogin": "Sign in to track your reports.", "subtitleRegister": "Create an account to report problems and follow them until they're fixed.",
+    "errors": {
+      "invalid": "That email and password don't match. Check them and try again.",
+      "exists": "An account with this email already exists. Try signing in instead.",
+      "network": "We couldn't reach the server. Check your connection and try again.",
+      "generic": "Something went wrong. Please try again.",
+      "name": "Enter your name.", "email": "Enter a valid email address.", "password": "Use at least 8 characters.",
+      "profileTitle": "We couldn't load your account", "profile": "Check your connection, then try again."
+    }
+  },
+  "camera": {
+    "take": "Take a photo", "title": "Take a photo", "shutter": "Take photo", "flip": "Switch camera", "done": "Done", "close": "Close",
+    "captured_one": "{{count}} photo taken", "captured_other": "{{count}} photos taken",
+    "denied": "Camera access is off. Allow it in your browser settings, or use Add a photo to pick one from your gallery.",
+    "unavailable": "We couldn't start the camera. Use Add a photo to pick one from your gallery.",
+    "error": "We couldn't take that photo. Try again."
+  },
+  "portal": {
+    "authority": "Department portal", "admin": "Admin portal", "queue": "Incident queue", "overview": "Overview",
+    "allIncidents": "All incidents", "signOut": "Sign out", "backToList": "Back to incidents",
+    "detailErrorTitle": "We couldn't load this incident", "detailErrorHint": "Check your connection, then try again."
+  }
+}
