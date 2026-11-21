@@ -8,75 +8,85 @@ import {
   CheckCircle2,
   Clock,
   ImagePlus,
+  KeyRound,
   Loader2,
   MapPin,
+  Mic,
+  MicOff,
   ShieldAlert,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import {
-  CIVIC_CATEGORIES,
+  CHENNAI_SYNTHETIC_JURISDICTIONS,
   type AiTriageResult,
-  type CivicCategory,
   type CivicIssue,
   type IssueStats,
 } from "@/lib/civic-schemas";
+import type { UiTranslations } from "@/lib/i18n";
 import { FOCUS_RING, PriorityBadge, UrgencyMeter } from "./CivicBadges";
 
 const SAMPLE_REPORTS = [
   {
-    label: "Live Wire & Broken Pole",
+    label: "Exposed Live Wire (Critical)",
     title: "Damaged streetlight pole leaning with exposed electric wires",
-    location: "RS Puram DB Road, Near Bus Shelter, Ward 11",
-    category: "Auto" as const,
+    location: "Mylapore Luz Corner Bus Shelter, Ward 126, Chennai",
+    wardCode: "GCC-W126",
     description:
       "After last night's storm, a metal streetlight pole tilted over the sidewalk and live wires are sparking intermittently near the bus shelter where commuters wait.",
   },
   {
-    label: "School Zone Pothole",
-    title: "Large crater pothole causing two-wheeler accidents",
-    location: "Hopes College Junction, Avinashi Road, Ward 24",
-    category: "Roads & Potholes" as const,
+    label: "School Zone Pothole (Tamil/English)",
+    title: "Large crater sadak gaddha pothole causing two-wheeler accidents",
+    location: "Pondy Bazaar Main Road, Near Govt High School, Ward 136, Chennai",
+    wardCode: "GCC-W136",
     description:
-      "A 4-foot wide deep pothole on the left lane has filled with muddy water. Two scooters skidded this morning during rush hour.",
+      "A 4-foot wide deep pothole on the left lane has filled with muddy rainwater. Two scooters skidded this morning during school drop-off.",
   },
   {
     label: "Burst Water Main",
-    title: "Continuous clean water leakage flooding residential street",
-    location: "Saibaba Colony 3rd Cross, Ward 16",
-    category: "Auto" as const,
+    title: "Continuous clean paani pipeline leakage flooding residential street",
+    location: "Anna Nagar 2nd Avenue, Ward 101, Chennai",
+    wardCode: "GCC-W101",
     description:
-      "A pressurized water supply joint burst near the corner valve 6 hours ago. Clean water is gushing into storm drains and nearby homes have zero water pressure.",
+      "A pressurized drinking water supply joint burst near the corner valve 6 hours ago. Clean water is gushing into storm drains.",
   },
   {
     label: "Overflowing Garbage",
-    title: "Uncollected garbage pile blocking clinic entrance",
-    location: "Singanallur Market Road, Ward 39",
-    category: "Waste & Sanitation" as const,
+    title: "Uncollected kachra garbage pile blocking clinic entrance",
+    location: "Adyar Besant Avenue Market Road, Ward 173, Chennai",
+    wardCode: "GCC-W173",
     description:
-      "The roadside waste bin has overflowed for 4 days with wet garbage spilling onto the road right next to a primary health clinic, causing foul odor and mosquitoes.",
+      "The roadside waste bin has overflowed for 4 days with wet garbage spilling onto the road right next to a primary health clinic.",
   },
 ];
 
 interface ReportIssueTabProps {
+  t: UiTranslations;
   onIssueCreated: (issue: CivicIssue, stats: IssueStats) => void;
   onNavigateToTracker: (issueId: string) => void;
 }
 
 export function ReportIssueTab({
+  t,
   onIssueCreated,
   onNavigateToTracker,
 }: ReportIssueTabProps) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
+  const [wardCode, setWardCode] = useState("GCC-W101");
   const [description, setDescription] = useState("");
   const [reporterName, setReporterName] = useState("");
-  const [userCategory, setUserCategory] = useState<CivicCategory | "Auto">("Auto");
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [locationConsent, setLocationConsent] = useState(true);
 
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [imageBase64, setImageBase64] = useState<string | null>(null);
-  const [imageMimeType, setImageMimeType] = useState<string | null>(null);
+  // Up to 4 images with client-side EXIF-safe DataURL creation
+  const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Optional Voice Input via Web Speech API
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<{ stop: () => void } | null>(null);
 
   const [triaging, setTriaging] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -101,16 +111,68 @@ export function ReportIssueTab({
   function applySample(sample: (typeof SAMPLE_REPORTS)[number]) {
     setTitle(sample.title);
     setLocation(sample.location);
+    setWardCode(sample.wardCode);
     setDescription(sample.description);
-    setUserCategory(sample.category);
     setTriagePreview(null);
     setSubmittedIssue(null);
     setError(null);
   }
 
+  function handleToggleVoice() {
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setListening(false);
+      return;
+    }
+
+    const SpeechRecognitionCtor =
+      typeof window !== "undefined"
+        ? (window as unknown as Record<string, unknown>).SpeechRecognition ||
+          (window as unknown as Record<string, unknown>).webkitSpeechRecognition
+        : null;
+
+    if (!SpeechRecognitionCtor || typeof SpeechRecognitionCtor !== "function") {
+      setError(
+        "Voice dictation is not supported in this browser tab. Please type your description below."
+      );
+      return;
+    }
+
+    try {
+      const recognition = new (SpeechRecognitionCtor as new () => {
+        lang: string;
+        interimResults: boolean;
+        onresult: (event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void;
+        onerror: () => void;
+        onend: () => void;
+        start: () => void;
+        stop: () => void;
+      })();
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.onresult = (event) => {
+        const transcript = event.results[0]?.[0]?.transcript || "";
+        if (transcript) {
+          setDescription((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        }
+      };
+      recognition.onerror = () => setListening(false);
+      recognition.onend = () => setListening(false);
+      recognitionRef.current = recognition;
+      setListening(true);
+      recognition.start();
+    } catch {
+      setListening(false);
+    }
+  }
+
   function handleUseMyLocation() {
+    if (!locationConsent) {
+      setError("Please check the location consent box before collecting GPS coordinates.");
+      return;
+    }
     if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser. Please type your location.");
+      setError("Geolocation is not available in this browser. Please enter a landmark.");
       return;
     }
     setLocating(true);
@@ -119,11 +181,11 @@ export function ReportIssueTab({
       (pos) => {
         const lat = pos.coords.latitude.toFixed(5);
         const lng = pos.coords.longitude.toFixed(5);
-        setLocation(`GPS (${lat}, ${lng}) — Nearby Ward`);
+        setLocation(`GPS (${lat}, ${lng}) — Chennai Metropolitan Ward`);
         setLocating(false);
       },
       () => {
-        setError("Unable to access GPS location. Please type a street name or landmark.");
+        setError("Could not read GPS pin. Please type the street name or landmark.");
         setLocating(false);
       },
       { timeout: 6000 }
@@ -131,43 +193,53 @@ export function ReportIssueTab({
   }
 
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 6 * 1024 * 1024) {
-      setError("Please upload an image smaller than 6 MB.");
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+
+    if (mediaPreviews.length + files.length > 4) {
+      setError("You can attach up to 4 photos per report.");
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = String(reader.result || "");
-      const [header, base64] = dataUrl.split(",");
-      const mimeMatch = header.match(/data:(.*);base64/);
-      setImagePreview(dataUrl);
-      setImageBase64(base64 || null);
-      setImageMimeType(mimeMatch?.[1] || file.type || "image/png");
-      setTriagePreview(null);
-      setError(null);
-    };
-    reader.readAsDataURL(file);
+    for (const file of files) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+        setError("Only JPEG, PNG, and WebP images are allowed.");
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Each image must be under 5 MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "");
+        setMediaPreviews((prev) => [...prev, dataUrl].slice(0, 4));
+        setTriagePreview(null);
+        setError(null);
+      };
+      reader.readAsDataURL(file);
+    }
   }
 
-  function clearImage() {
-    setImagePreview(null);
-    setImageBase64(null);
-    setImageMimeType(null);
+  function removePhotoAt(index: number) {
+    setMediaPreviews((prev) => prev.filter((_, idx) => idx !== index));
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   async function handlePreviewAi() {
     if (title.trim().length < 3 || description.trim().length < 10 || location.trim().length < 3) {
-      setError("Please fill in title, location, and a brief description (10+ characters) first.");
+      setError("Please enter a short summary, details (10+ chars), and street/landmark first.");
       return;
     }
 
     setTriaging(true);
     setError(null);
     try {
+      const firstImage = mediaPreviews[0];
+      const [header, base64] = firstImage ? firstImage.split(",") : ["", ""];
+      const mimeMatch = header?.match(/data:(.*);base64/);
+
       const res = await fetch("/api/ai/triage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -175,9 +247,9 @@ export function ReportIssueTab({
           title,
           description,
           location,
-          userCategory,
-          imageBase64: imageBase64 || undefined,
-          imageMimeType: imageMimeType || undefined,
+          userCategory: "Auto",
+          imageBase64: base64 || undefined,
+          imageMimeType: mimeMatch?.[1] || undefined,
         }),
       });
       const data = await res.json();
@@ -189,7 +261,7 @@ export function ReportIssueTab({
         aiModel: data.aiModel,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not analyze complaint.");
+      setError(err instanceof Error ? err.message : "Could not preview AI routing.");
     } finally {
       setTriaging(false);
     }
@@ -198,7 +270,11 @@ export function ReportIssueTab({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (title.trim().length < 3 || description.trim().length < 10 || location.trim().length < 3) {
-      setError("Please complete the title, location, and description before submitting.");
+      setError("Please complete Step 1 (summary & details) and Step 2 (street/landmark).");
+      return;
+    }
+    if (!locationConsent) {
+      setError("Please confirm location consent so municipal crews can locate the issue.");
       return;
     }
 
@@ -207,6 +283,10 @@ export function ReportIssueTab({
     setSubmittedIssue(null);
 
     try {
+      const firstImage = mediaPreviews[0];
+      const [header, base64] = firstImage ? firstImage.split(",") : ["", ""];
+      const mimeMatch = header?.match(/data:(.*);base64/);
+
       const res = await fetch("/api/issues", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -214,11 +294,15 @@ export function ReportIssueTab({
           title,
           description,
           location,
-          reporterName: reporterName.trim() || undefined,
-          userCategory,
-          imageBase64: imageBase64 || undefined,
-          imageMimeType: imageMimeType || undefined,
-          imageDataUrl: imagePreview || undefined,
+          wardCode,
+          locationConsent,
+          reporterName: isAnonymous ? undefined : reporterName.trim() || undefined,
+          isAnonymous,
+          userCategory: "Auto",
+          imageBase64: base64 || undefined,
+          imageMimeType: mimeMatch?.[1] || undefined,
+          imageDataUrl: firstImage || undefined,
+          mediaUrls: mediaPreviews,
           precomputedTriage: triagePreview?.triage,
           aiSource: triagePreview?.aiSource,
           aiModel: triagePreview?.aiModel,
@@ -226,7 +310,7 @@ export function ReportIssueTab({
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to submit civic issue.");
+      if (!res.ok) throw new Error(data.error || "Failed to save your report.");
 
       const created: CivicIssue = data.issue;
       setSubmittedIssue(created);
@@ -252,15 +336,13 @@ export function ReportIssueTab({
 
       onIssueCreated(created, data.stats);
 
-      // Clear form fields so citizen can submit another issue cleanly
       setTitle("");
       setLocation("");
       setDescription("");
       setReporterName("");
-      setUserCategory("Auto");
-      clearImage();
+      setMediaPreviews([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit complaint.");
+      setError(err instanceof Error ? err.message : "Could not save your report.");
     } finally {
       setSubmitting(false);
     }
@@ -268,14 +350,19 @@ export function ReportIssueTab({
 
   return (
     <div className="grid gap-6 lg:grid-cols-12">
-      {/* Left: Citizen Submission Form */}
+      {/* Left: <= 3-Step Citizen Submission Form (Citizen never needs to pick a department!) */}
       <section
-        aria-label="Submit a civic issue"
+        aria-label="Report a civic problem"
         className="flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 sm:p-6 lg:col-span-7"
       >
         <div>
+          <h2 className="text-lg font-bold text-white">{t.reportForm.heading}</h2>
+          <p className="mt-1 text-xs text-slate-300">{t.reportForm.subheading}</p>
+        </div>
+
+        <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
-            Quick Demo Scenarios (1-Click Fill)
+            Quick 1-Click Sample Reports
           </p>
           <div className="flex flex-wrap gap-2">
             {SAMPLE_REPORTS.map((sample) => (
@@ -283,7 +370,7 @@ export function ReportIssueTab({
                 key={sample.label}
                 type="button"
                 onClick={() => applySample(sample)}
-                className={`rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs font-medium text-slate-100 transition hover:border-indigo-400/50 hover:bg-indigo-500/15 ${FOCUS_RING}`}
+                className={`min-h-[38px] rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-100 transition hover:border-indigo-400/50 hover:bg-indigo-500/15 ${FOCUS_RING}`}
               >
                 {sample.label}
               </button>
@@ -291,170 +378,251 @@ export function ReportIssueTab({
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-          <div>
-            <label
-              htmlFor="issue-title"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300"
-            >
-              Issue Title <span className="text-rose-400">*</span>
-            </label>
-            <input
-              id="issue-title"
-              type="text"
-              required
-              maxLength={140}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Deep pothole near school gate or overflowing garbage bin"
-              className={`w-full rounded-xl border border-white/15 bg-slate-950/75 px-3.5 py-2.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="issue-location"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300"
-              >
-                Location / Ward <span className="text-rose-400">*</span>
-              </label>
-              <div className="flex gap-1.5">
-                <input
-                  id="issue-location"
-                  type="text"
-                  required
-                  maxLength={200}
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  placeholder="Street, landmark, or ward no."
-                  className={`w-full rounded-xl border border-white/15 bg-slate-950/75 px-3.5 py-2.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
-                />
-                <button
-                  type="button"
-                  onClick={handleUseMyLocation}
-                  disabled={locating}
-                  aria-label="Use current GPS location"
-                  title="Use GPS location"
-                  className={`shrink-0 rounded-xl border border-white/15 bg-white/5 px-3 text-slate-200 transition hover:bg-white/10 ${FOCUS_RING}`}
-                >
-                  {locating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  ) : (
-                    <MapPin className="h-4 w-4 text-cyan-300" aria-hidden="true" />
-                  )}
-                </button>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5" noValidate>
+          {/* STEP 1: WHAT HAPPENED? */}
+          <fieldset className="space-y-3 rounded-xl border border-white/10 bg-slate-950/50 p-4">
+            <legend className="px-1 text-xs font-bold uppercase tracking-wider text-indigo-200">
+              {t.reportForm.step1Title}
+            </legend>
 
             <div>
               <label
-                htmlFor="issue-category"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300"
+                htmlFor="issue-title"
+                className="mb-1 block text-xs font-semibold text-slate-200"
               >
-                Category
-              </label>
-              <select
-                id="issue-category"
-                value={userCategory}
-                onChange={(e) => setUserCategory(e.target.value as CivicCategory | "Auto")}
-                className={`w-full rounded-xl border border-white/15 bg-slate-950 px-3.5 py-2.5 text-sm text-white ${FOCUS_RING}`}
-              >
-                <option value="Auto">Auto-Detect with Gemini AI</option>
-                {CIVIC_CATEGORIES.map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="issue-description"
-              className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300"
-            >
-              Detailed Description <span className="text-rose-400">*</span>
-            </label>
-            <textarea
-              id="issue-description"
-              rows={4}
-              required
-              maxLength={4000}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Describe what happened, how long it has persisted, and any immediate safety hazards for pedestrians or traffic..."
-              className={`w-full rounded-xl border border-white/15 bg-slate-950/75 p-3.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
-            />
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label
-                htmlFor="reporter-name"
-                className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300"
-              >
-                Your Name (Optional)
+                {t.reportForm.titleLabel} <span className="text-rose-400">*</span>
               </label>
               <input
-                id="reporter-name"
+                id="issue-title"
                 type="text"
-                maxLength={80}
-                value={reporterName}
-                onChange={(e) => setReporterName(e.target.value)}
-                placeholder="Anonymous Citizen"
-                className={`w-full rounded-xl border border-white/15 bg-slate-950/75 px-3.5 py-2.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
+                required
+                maxLength={140}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={t.reportForm.titlePlaceholder}
+                className={`min-h-[44px] w-full rounded-xl border border-white/15 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
               />
             </div>
 
             <div>
-              <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Photo Evidence (Optional)
+              <div className="mb-1 flex items-center justify-between">
+                <label
+                  htmlFor="issue-description"
+                  className="text-xs font-semibold text-slate-200"
+                >
+                  {t.reportForm.descriptionLabel} <span className="text-rose-400">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleToggleVoice}
+                  aria-pressed={listening}
+                  className={`inline-flex min-h-[34px] items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${FOCUS_RING} ${
+                    listening
+                      ? "border-rose-400/50 bg-rose-500/20 text-rose-100"
+                      : "border-white/15 bg-white/5 text-slate-200 hover:bg-white/10"
+                  }`}
+                >
+                  {listening ? (
+                    <>
+                      <MicOff className="h-3.5 w-3.5 text-rose-300" aria-hidden="true" />
+                      {t.reportForm.voiceStop}
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-3.5 w-3.5 text-cyan-300" aria-hidden="true" />
+                      {t.reportForm.voiceStart}
+                    </>
+                  )}
+                </button>
+              </div>
+              <textarea
+                id="issue-description"
+                rows={3}
+                required
+                maxLength={4000}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder={t.reportForm.descriptionPlaceholder}
+                className={`w-full rounded-xl border border-white/15 bg-slate-950 p-3.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
+              />
+            </div>
+          </fieldset>
+
+          {/* STEP 2: WHERE IS IT? */}
+          <fieldset className="space-y-3 rounded-xl border border-white/10 bg-slate-950/50 p-4">
+            <legend className="px-1 text-xs font-bold uppercase tracking-wider text-indigo-200">
+              {t.reportForm.step2Location}
+            </legend>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <label
+                  htmlFor="issue-location"
+                  className="mb-1 block text-xs font-semibold text-slate-200"
+                >
+                  {t.reportForm.landmarkLabel} <span className="text-rose-400">*</span>
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    id="issue-location"
+                    type="text"
+                    required
+                    maxLength={200}
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    placeholder={t.reportForm.landmarkPlaceholder}
+                    className={`min-h-[44px] w-full rounded-xl border border-white/15 bg-slate-950 px-3.5 py-2.5 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleUseMyLocation}
+                    disabled={locating}
+                    aria-label={t.reportForm.useGpsButton}
+                    title={t.reportForm.useGpsButton}
+                    className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl border border-white/15 bg-white/5 px-3 text-slate-200 transition hover:bg-white/10 ${FOCUS_RING}`}
+                  >
+                    {locating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <MapPin className="h-4 w-4 text-cyan-300" aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="issue-ward"
+                  className="mb-1 block text-xs font-semibold text-slate-200"
+                >
+                  Municipal Ward
+                </label>
+                <select
+                  id="issue-ward"
+                  value={wardCode}
+                  onChange={(e) => setWardCode(e.target.value)}
+                  className={`min-h-[44px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2.5 text-xs text-white ${FOCUS_RING}`}
+                >
+                  {CHENNAI_SYNTHETIC_JURISDICTIONS.map((j) => (
+                    <option key={j.wardCode} value={j.wardCode}>
+                      {j.wardName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2.5 pt-1 text-xs text-slate-200">
+              <input
+                type="checkbox"
+                checked={locationConsent}
+                onChange={(e) => setLocationConsent(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-900"
+              />
+              <span>{t.reportForm.locationConsentLabel}</span>
+            </label>
+          </fieldset>
+
+          {/* STEP 3: PHOTOS & PRIVACY */}
+          <fieldset className="space-y-3 rounded-xl border border-white/10 bg-slate-950/50 p-4">
+            <legend className="px-1 text-xs font-bold uppercase tracking-wider text-indigo-200">
+              {t.reportForm.step3Evidence}
+            </legend>
+
+            <div>
+              <span className="mb-1 block text-xs font-semibold text-slate-200">
+                {t.reportForm.photosLabel}
               </span>
+              <p className="mb-2 text-[11px] text-slate-400">{t.reportForm.photosHint}</p>
+
               <input
                 ref={fileInputRef}
                 id="civic-image-upload"
                 type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                aria-label="Upload optional photo of the civic issue"
+                multiple
+                accept="image/png,image/jpeg,image/webp"
+                aria-label={t.reportForm.photosLabel}
                 onChange={handleImageUpload}
                 className="hidden"
               />
-              {imagePreview ? (
-                <div className="flex items-center justify-between gap-2 rounded-xl border border-indigo-400/40 bg-indigo-500/10 px-3 py-2">
-                  <div className="flex items-center gap-2 overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={imagePreview}
-                      alt="Uploaded civic issue preview"
-                      className="h-7 w-7 rounded object-cover"
-                    />
-                    <span className="truncate text-xs text-indigo-100">
-                      Image attached for Gemini Vision
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={clearImage}
-                    aria-label="Remove attached photo"
-                    className={`rounded-lg p-1 text-rose-200 hover:bg-rose-500/20 ${FOCUS_RING}`}
-                  >
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                  </button>
+
+              {mediaPreviews.length > 0 && (
+                <div className="mb-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {mediaPreviews.map((src, idx) => (
+                    <div
+                      key={idx}
+                      className="relative overflow-hidden rounded-xl border border-indigo-400/40 bg-slate-900 p-1"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt={`Uploaded evidence photo ${idx + 1} of ${mediaPreviews.length}`}
+                        className="h-20 w-full rounded-lg object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePhotoAt(idx)}
+                        aria-label={`Remove evidence photo ${idx + 1}`}
+                        className={`absolute right-1.5 top-1.5 rounded-md bg-slate-950/90 p-1 text-rose-200 hover:bg-rose-500/30 ${FOCUS_RING}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ) : (
+              )}
+
+              {mediaPreviews.length < 4 && (
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className={`flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-3 py-2.5 text-xs font-medium text-slate-200 transition hover:border-indigo-400/50 hover:bg-white/5 ${FOCUS_RING}`}
+                  className={`flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] px-3 py-2.5 text-xs font-medium text-slate-200 transition hover:border-indigo-400/50 hover:bg-white/5 ${FOCUS_RING}`}
                 >
                   <ImagePlus className="h-4 w-4 text-indigo-300" aria-hidden="true" />
-                  Upload Photo for AI Vision
+                  Add Evidence Photo ({mediaPreviews.length}/4)
                 </button>
               )}
             </div>
-          </div>
+
+            <div className="grid gap-3 pt-1 sm:grid-cols-2">
+              <label className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.02] p-3 text-xs text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={isAnonymous}
+                  onChange={(e) => setIsAnonymous(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-900"
+                />
+                <div>
+                  <span className="font-semibold text-white">
+                    {t.reportForm.anonymousLabel}
+                  </span>
+                  <p className="mt-0.5 text-[11px] text-slate-400">
+                    {t.reportForm.anonymousHint}
+                  </p>
+                </div>
+              </label>
+
+              {!isAnonymous && (
+                <div>
+                  <label
+                    htmlFor="reporter-name"
+                    className="mb-1 block text-xs font-semibold text-slate-200"
+                  >
+                    Your Name (Optional)
+                  </label>
+                  <input
+                    id="reporter-name"
+                    type="text"
+                    maxLength={80}
+                    value={reporterName}
+                    onChange={(e) => setReporterName(e.target.value)}
+                    placeholder="Citizen Reporter"
+                    className={`min-h-[44px] w-full rounded-xl border border-white/15 bg-slate-950 px-3.5 py-2 text-sm text-white placeholder-slate-400 ${FOCUS_RING}`}
+                  />
+                </div>
+              )}
+            </div>
+          </fieldset>
 
           {error && (
             <div
@@ -466,22 +634,23 @@ export function ReportIssueTab({
             </div>
           )}
 
-          <div className="flex flex-wrap gap-3 pt-1">
+          {/* Single Primary Action ("Report a problem") + Secondary AI Preview */}
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               disabled={triaging || submitting}
               onClick={handlePreviewAi}
-              className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-4 py-2.5 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+              className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl border border-indigo-400/40 bg-indigo-500/15 px-4 py-2.5 text-sm font-semibold text-indigo-100 transition hover:bg-indigo-500/25 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
             >
               {triaging ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Analyzing with Gemini...
+                  Analyzing...
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4" aria-hidden="true" />
-                  Preview AI Triage
+                  Preview AI Routing
                 </>
               )}
             </button>
@@ -489,16 +658,16 @@ export function ReportIssueTab({
             <button
               type="submit"
               disabled={submitting || triaging}
-              className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
+              className={`inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50 ${FOCUS_RING}`}
             >
               {submitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                  Submitting & Routing...
+                  {t.reportForm.submittingButton}
                 </>
               ) : (
                 <>
-                  Submit Civic Report
+                  {t.reportForm.submitButton}
                   <ArrowRight className="h-4 w-4" aria-hidden="true" />
                 </>
               )}
@@ -507,7 +676,7 @@ export function ReportIssueTab({
         </form>
       </section>
 
-      {/* Right: Live Gemini AI Classification & Confirmation Panel */}
+      {/* Right: Live Gemini AI Classification & Action-Led Confirmation Panel */}
       <section
         aria-label="Gemini AI classification result"
         aria-live="polite"
@@ -518,36 +687,48 @@ export function ReportIssueTab({
             role="status"
             className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-4"
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-200">
-                <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-                Report Submitted: {submittedIssue.id}
-              </div>
+            <div className="flex items-center gap-2 text-sm font-bold text-emerald-200">
+              <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
+              {t.reportForm.successHeading} Tracking ID {submittedIssue.id}
             </div>
             <p className="mt-1.5 text-xs text-emerald-100/90">
-              Routed to <strong>{submittedIssue.recommendedDepartment}</strong> with{" "}
-              <strong>{submittedIssue.priority}</strong> priority.
+              Automatically routed to <strong>{submittedIssue.recommendedDepartment}</strong>{" "}
+              ({submittedIssue.priority} priority).
             </p>
+
+            {submittedIssue.anonymousTrackingToken && (
+              <div className="mt-2.5 flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-500/15 p-2.5 text-xs text-amber-100">
+                <KeyRound className="h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
+                <span>
+                  {t.reportForm.anonymousTokenLabel}{" "}
+                  <code className="rounded bg-slate-950 px-1.5 py-0.5 font-mono font-bold text-amber-200">
+                    {submittedIssue.anonymousTrackingToken}
+                  </code>
+                </span>
+              </div>
+            )}
+
             {igmerReceipt && (
-              <div className="mt-2 rounded-lg border border-emerald-400/30 bg-slate-950/60 p-2.5 text-[11px] text-emerald-100">
+              <div className="mt-2.5 rounded-lg border border-emerald-400/30 bg-slate-950/60 p-2.5 text-[11px] text-emerald-100">
                 <p>
-                  <strong>IGMER Outbox Receipt:</strong> {igmerReceipt.reportId} (Outbox{" "}
+                  <strong>Ingest-First Receipt:</strong> {igmerReceipt.reportId} (Outbox{" "}
                   {igmerReceipt.outboxEventId})
                 </p>
                 <p className="mt-0.5">
-                  <strong>Entity Resolution:</strong> {igmerReceipt.matchingOutcome} → Master
+                  <strong>Incident Clustering:</strong> {igmerReceipt.matchingOutcome} → Master
                   Incident <strong>{igmerReceipt.masterIncidentId}</strong> (
                   {igmerReceipt.supportingReportCount} supporting report
                   {igmerReceipt.supportingReportCount === 1 ? "" : "s"})
                 </p>
               </div>
             )}
+
             <button
               type="button"
               onClick={() => onNavigateToTracker(submittedIssue.id)}
-              className={`mt-3 inline-flex items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/30 ${FOCUS_RING}`}
+              className={`mt-3 inline-flex min-h-[40px] items-center gap-1.5 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/30 ${FOCUS_RING}`}
             >
-              Track {submittedIssue.id} Live
+              Track & Verify {submittedIssue.id}
               <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
@@ -558,12 +739,11 @@ export function ReportIssueTab({
             <div className="mb-3 rounded-2xl border border-indigo-400/20 bg-indigo-500/10 p-3">
               <Sparkles className="h-7 w-7 text-indigo-300" aria-hidden="true" />
             </div>
-            <h2 className="text-base font-semibold text-white">
-              Gemini AI Triage Engine
-            </h2>
+            <h3 className="text-base font-semibold text-white">
+              Zero-Friction AI Department Routing
+            </h3>
             <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-slate-300">
-              Click a quick demo scenario or enter a complaint to see instant AI categorization,
-              urgency scoring, department routing, and crew dispatch steps.
+              You never need to guess department names. Gemini classifies your report, checks for duplicate reports nearby, and routes it to the responsible crew.
             </p>
           </div>
         )}
@@ -576,7 +756,7 @@ export function ReportIssueTab({
             <Loader2 className="h-8 w-8 animate-spin text-indigo-400" aria-hidden="true" />
             <p className="text-sm font-medium">
               {submitting
-                ? "Running Gemini triage & registering complaint..."
+                ? "Saving report & running background clustering..."
                 : "Analyzing civic impact & routing department..."}
             </p>
           </div>
@@ -587,14 +767,12 @@ export function ReportIssueTab({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-indigo-300" aria-hidden="true" />
-                <h2 className="text-sm font-semibold text-white">AI Triage Assessment</h2>
+                <h3 className="text-sm font-semibold text-white">AI Routing & Triage Summary</h3>
               </div>
               <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[11px] text-slate-300">
                 {triagePreview.aiSource === "gemini"
                   ? `Gemini (${triagePreview.aiModel})`
-                  : "Offline Fallback"}
-                {" · "}
-                {triagePreview.triage.confidence}% conf.
+                  : "Resilient Fallback"}
               </span>
             </div>
 
@@ -610,47 +788,21 @@ export function ReportIssueTab({
             <div className="rounded-xl border border-indigo-400/25 bg-indigo-500/10 p-3.5">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-indigo-200">
                 <Building2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Recommended Department
+                Assigned Municipal Department
               </div>
               <p className="mt-1 text-sm font-bold text-white">
                 {triagePreview.triage.recommendedDepartment}
               </p>
               <div className="mt-2 flex items-center gap-1.5 text-xs text-indigo-200">
                 <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                Est. Resolution: {triagePreview.triage.estimatedResolutionWindow}
+                Target SLA: {triagePreview.triage.estimatedResolutionWindow}
               </div>
-            </div>
-
-            <div>
-              <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Impact Reasoning
-              </h3>
-              <p className="text-xs leading-relaxed text-slate-200">
-                {triagePreview.triage.publicImpactReason}
-              </p>
-            </div>
-
-            <div>
-              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-slate-300">
-                Recommended Crew Actions
-              </h3>
-              <ul className="space-y-1.5">
-                {triagePreview.triage.recommendedActions.map((step, i) => (
-                  <li
-                    key={i}
-                    className="flex items-start gap-2 rounded-lg bg-slate-950/60 p-2 text-xs text-slate-200"
-                  >
-                    <span className="font-bold text-indigo-300">{i + 1}.</span>
-                    <span>{step}</span>
-                  </li>
-                ))}
-              </ul>
             </div>
 
             <div className="flex items-start gap-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-100">
               <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
               <span>
-                <strong>Citizen Safety Advisory:</strong> {triagePreview.triage.safetyAdvisory}
+                <strong>Safety Advisory:</strong> {triagePreview.triage.safetyAdvisory}
               </span>
             </div>
           </div>

@@ -11,6 +11,12 @@ export const CIVIC_CATEGORIES = [
 ] as const;
 
 export const MUNICIPAL_DEPARTMENTS = [
+  "Greater Chennai Corporation (GCC) — Storm Water Drain & Roads",
+  "Chennai MetroWater (CMWSSB) — Water Supply & Sewerage",
+  "TANGEDCO — Streetlighting & Electrical Distribution",
+  "GCC Solid Waste Management & Conservancy",
+  "Greater Chennai Traffic & Public Safety Wing",
+  "GCC Parks & Urban Forestry Department",
   "Public Works & Roads Department (PWD)",
   "Municipal Solid Waste & Sanitation",
   "Electricity & Streetlighting Board",
@@ -21,12 +27,87 @@ export const MUNICIPAL_DEPARTMENTS = [
 ] as const;
 
 export const ISSUE_PRIORITIES = ["Low", "Medium", "High", "Critical"] as const;
-export const ISSUE_STATUSES = ["Reported", "In Progress", "Resolved"] as const;
+
+export const ISSUE_STATUSES = [
+  "Reported",
+  "AI Analyzed",
+  "Matched/Created",
+  "Under Review",
+  "Assigned",
+  "Accepted",
+  "In Progress",
+  "Resolved",
+  "Citizen Verified",
+  "Closed",
+  "Rejected",
+  "Escalated",
+  "Reopened",
+  "Awaiting Info",
+  "needs_manual_review",
+] as const;
 
 export type CivicCategory = (typeof CIVIC_CATEGORIES)[number];
 export type MunicipalDepartment = (typeof MUNICIPAL_DEPARTMENTS)[number];
 export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
 export type IssueStatus = (typeof ISSUE_STATUSES)[number];
+
+export interface JurisdictionRule {
+  wardCode: string;
+  wardName: string;
+  zoneName: string;
+  category: CivicCategory;
+  department: MunicipalDepartment;
+  slaHours: number;
+  isSynthetic: true;
+}
+
+export const CHENNAI_SYNTHETIC_JURISDICTIONS: JurisdictionRule[] = [
+  {
+    wardCode: "GCC-W101",
+    wardName: "Ward 101 — Anna Nagar East",
+    zoneName: "Zone 8 (Anna Nagar)",
+    category: "Water & Drainage",
+    department: "Chennai MetroWater (CMWSSB) — Water Supply & Sewerage",
+    slaHours: 6,
+    isSynthetic: true,
+  },
+  {
+    wardCode: "GCC-W126",
+    wardName: "Ward 126 — Mandaveli / Mylapore",
+    zoneName: "Zone 9 (Teynampet)",
+    category: "Streetlights & Electricity",
+    department: "TANGEDCO — Streetlighting & Electrical Distribution",
+    slaHours: 4,
+    isSynthetic: true,
+  },
+  {
+    wardCode: "GCC-W136",
+    wardName: "Ward 136 — T. Nagar / Pondy Bazaar",
+    zoneName: "Zone 10 (Kodambakkam)",
+    category: "Roads & Potholes",
+    department: "Greater Chennai Corporation (GCC) — Storm Water Drain & Roads",
+    slaHours: 24,
+    isSynthetic: true,
+  },
+  {
+    wardCode: "GCC-W173",
+    wardName: "Ward 173 — Adyar / Besant Nagar",
+    zoneName: "Zone 13 (Adyar)",
+    category: "Waste & Sanitation",
+    department: "GCC Solid Waste Management & Conservancy",
+    slaHours: 12,
+    isSynthetic: true,
+  },
+  {
+    wardCode: "GCC-W192",
+    wardName: "Ward 192 — Neelankarai / OMR IT Corridor",
+    zoneName: "Zone 15 (Sholinganallur)",
+    category: "Public Safety",
+    department: "Greater Chennai Traffic & Public Safety Wing",
+    slaHours: 8,
+    isSynthetic: true,
+  },
+];
 
 export const AiTriageSchema = z.object({
   category: z
@@ -92,7 +173,13 @@ export const TriageRequestSchema = z.object({
 
 export const CreateIssueRequestSchema = TriageRequestSchema.extend({
   reporterName: z.string().trim().max(80).optional(),
+  isAnonymous: z.boolean().optional(),
+  locationConsent: z.boolean().optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
+  wardCode: z.string().max(40).optional(),
   imageDataUrl: z.string().max(8_500_000).optional(),
+  mediaUrls: z.array(z.string().max(8_500_000)).max(4).optional(),
   precomputedTriage: AiTriageSchema.optional(),
   aiSource: z.enum(["gemini", "fallback"]).optional(),
   aiModel: z.string().max(80).optional(),
@@ -102,8 +189,14 @@ export const UpdateIssueRequestSchema = z
   .object({
     status: z.enum(ISSUE_STATUSES).optional(),
     priority: z.enum(ISSUE_PRIORITIES).optional(),
+    priorityOverrideReason: z.string().trim().max(300).optional(),
     recommendedDepartment: z.enum(MUNICIPAL_DEPARTMENTS).optional(),
     adminNote: z.string().trim().max(500).optional(),
+    internalNote: z.string().trim().max(500).optional(),
+    resolutionEvidenceUrl: z.string().max(8_500_000).optional(),
+    citizenAction: z.enum(["VERIFY_RESOLUTION", "DISPUTE_REOPEN"]).optional(),
+    citizenFeedback: z.string().trim().max(500).optional(),
+    anonymousToken: z.string().trim().max(120).optional(),
   })
   .refine(
     (data) =>
@@ -111,7 +204,9 @@ export const UpdateIssueRequestSchema = z
         data.status ||
           data.priority ||
           data.recommendedDepartment ||
-          (data.adminNote && data.adminNote.length > 0)
+          data.citizenAction ||
+          (data.adminNote && data.adminNote.length > 0) ||
+          (data.internalNote && data.internalNote.length > 0)
       ),
     { message: "Provide at least one field to update." }
   );
@@ -145,9 +240,21 @@ export const AssistantRequestSchema = z.object({
 
 export interface TimelineEvent {
   timestamp: string;
+  prevStatus?: IssueStatus;
   status: IssueStatus;
-  actor: "Citizen" | "Gemini AI" | "Municipal Admin";
-  note: string;
+  actor: "Citizen" | "Gemini AI" | "Municipal Admin" | "Authority Officer";
+  note: string; // Public comment visible to citizens
+  internalNote?: string; // Stripped from public citizen responses!
+  evidenceUrl?: string;
+}
+
+export interface CitizenNotification {
+  id: string;
+  issueId: string;
+  title: string;
+  message: string;
+  createdAt: string;
+  read: boolean;
 }
 
 export interface CivicIssue {
@@ -155,7 +262,13 @@ export interface CivicIssue {
   title: string;
   description: string;
   location: string;
+  wardCode?: string;
+  latitude: number;
+  longitude: number;
+  locationConsent: boolean;
   reporterName: string;
+  isAnonymous: boolean;
+  anonymousTrackingToken?: string;
   userCategory: CivicCategory | "Auto";
   category: CivicCategory;
   priority: IssuePriority;
@@ -171,6 +284,10 @@ export interface CivicIssue {
   aiModel: string;
   status: IssueStatus;
   imageDataUrl?: string;
+  mediaUrls: string[];
+  resolutionEvidenceUrl?: string;
+  supportingReportCount: number;
+  isSynthetic: boolean;
   createdAt: string;
   updatedAt: string;
   timeline: TimelineEvent[];
@@ -181,7 +298,10 @@ export interface IssueStats {
   reported: number;
   inProgress: number;
   resolved: number;
+  citizenVerified: number;
   criticalAndHigh: number;
   resolutionRate: number;
   byCategory: Record<string, number>;
+  byDepartment: Record<string, number>;
+  byWard: Record<string, number>;
 }

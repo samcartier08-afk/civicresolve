@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { classifyCivicIssue } from "@/lib/civic-ai";
 import {
+  CHENNAI_SYNTHETIC_JURISDICTIONS,
   CreateIssueRequestSchema,
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
@@ -8,22 +9,35 @@ import {
   type IssueStatus,
 } from "@/lib/civic-schemas";
 import { ingestCitizenReport, processOutboxEvent } from "@/lib/igmer-engine";
-import { computeIssueStats, createIssue, listIssues } from "@/lib/issue-store";
+import {
+  computeIssueStats,
+  createIssue,
+  listCitizenNotifications,
+  listIssues,
+} from "@/lib/issue-store";
 import {
   checkRateLimit,
   getClientIdentifier,
+  listAuditLogs,
   sanitizeApiError,
+  validateImageMagicBytesAndSize,
 } from "@/lib/security";
 
 export const maxDuration = 60;
-
-const MAX_IMAGE_BASE64_LENGTH = 8 * 1024 * 1024;
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const rawStatus = searchParams.get("status");
   const rawPriority = searchParams.get("priority");
+  const department = searchParams.get("department") ?? undefined;
+  const wardCode = searchParams.get("wardCode") ?? undefined;
   const search = searchParams.get("search") ?? undefined;
+  const roleHeader = (req.headers.get("x-civic-role") || "").toLowerCase();
+  const includeInternalNotes =
+    roleHeader === "authority" ||
+    roleHeader === "admin" ||
+    searchParams.get("role") === "authority" ||
+    searchParams.get("role") === "admin";
 
   const status =
     rawStatus && (ISSUE_STATUSES as readonly string[]).includes(rawStatus)
@@ -34,15 +48,28 @@ export async function GET(req: Request) {
       ? (rawPriority as IssuePriority)
       : "All";
 
-  const issues = listIssues({ status, priority, search });
+  const issues = listIssues({
+    status,
+    priority,
+    department,
+    wardCode,
+    search,
+    includeInternalNotes,
+  });
   const stats = computeIssueStats();
 
-  return NextResponse.json({ issues, stats });
+  return NextResponse.json({
+    issues,
+    stats,
+    notifications: listCitizenNotifications(),
+    jurisdictions: CHENNAI_SYNTHETIC_JURISDICTIONS,
+    auditLogs: includeInternalNotes ? listAuditLogs() : [],
+  });
 }
 
 export async function POST(req: Request) {
   try {
-    const rate = checkRateLimit(`create-issue:${getClientIdentifier(req)}`, 15, 60_000);
+    const rate = checkRateLimit(`create-issue:${getClientIdentifier(req)}`, 20, 60_000);
     if (!rate.allowed) {
       return NextResponse.json(
         { error: "Too many submissions. Please wait a moment before submitting again." },
@@ -66,22 +93,54 @@ export async function POST(req: Request) {
       title,
       description,
       location,
+      wardCode,
+      latitude,
+      longitude,
+      locationConsent,
       reporterName,
+      isAnonymous,
       userCategory,
       imageBase64,
       imageMimeType,
       imageDataUrl,
+      mediaUrls,
       precomputedTriage,
       aiSource,
       aiModel,
     } = parsed.data;
 
-    if (imageBase64 && imageBase64.length > MAX_IMAGE_BASE64_LENGTH) {
-      return NextResponse.json(
-        { error: "Uploaded image is too large. Please keep images under 6 MB." },
-        { status: 413 }
-      );
+    // Validate magic bytes & 5 MB cap on uploaded images
+    if (imageBase64) {
+      const check = validateImageMagicBytesAndSize(imageBase64, imageMimeType);
+      if (!check.valid) {
+        return NextResponse.json({ error: check.error }, { status: 400 });
+      }
     }
+    if (mediaUrls && mediaUrls.length > 0) {
+      for (const dataUrl of mediaUrls) {
+        const check = validateImageMagicBytesAndSize(dataUrl);
+        if (!check.valid) {
+          return NextResponse.json({ error: check.error }, { status: 400 });
+        }
+      }
+    }
+
+    // Priority 1: Ingest-First persistence + Transactional Outbox in same transaction
+    const igmerIngested = ingestCitizenReport({
+      idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
+      reporterName: isAnonymous ? "Anonymous Citizen" : reporterName?.trim() || "Citizen Reporter",
+      title,
+      description,
+      location,
+      latitude,
+      longitude,
+      userCategory: userCategory ?? "Auto",
+      imageDataUrl:
+        imageDataUrl && imageDataUrl.startsWith("data:image/")
+          ? imageDataUrl
+          : mediaUrls?.[0],
+    });
+    const igmerProcessed = await processOutboxEvent(igmerIngested.outboxEvent.eventId);
 
     let triage = precomputedTriage;
     let resolvedSource = aiSource ?? "gemini";
@@ -105,7 +164,12 @@ export async function POST(req: Request) {
       title,
       description,
       location,
-      reporterName: reporterName?.trim() || "Anonymous Citizen",
+      wardCode,
+      latitude,
+      longitude,
+      locationConsent: locationConsent ?? true,
+      reporterName: reporterName?.trim() || "Citizen Reporter",
+      isAnonymous: Boolean(isAnonymous),
       userCategory: userCategory ?? "Auto",
       category: triage.category,
       priority: triage.priority,
@@ -122,25 +186,14 @@ export async function POST(req: Request) {
       imageDataUrl:
         imageDataUrl && imageDataUrl.startsWith("data:image/")
           ? imageDataUrl
-          : undefined,
+          : mediaUrls?.[0],
+      mediaUrls,
+      supportingReportCount:
+        igmerProcessed.masterIncident?.supportingReportCount ?? 1,
+      isSynthetic: false,
     });
 
     const stats = computeIssueStats();
-
-    // Priority 1 & 2: Record through IGMER Ingest-First + Transactional Outbox + Entity Resolution
-    const igmerIngested = ingestCitizenReport({
-      idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
-      reporterName: reporterName?.trim() || "Anonymous Citizen",
-      title,
-      description,
-      location,
-      userCategory: userCategory ?? "Auto",
-      imageDataUrl:
-        imageDataUrl && imageDataUrl.startsWith("data:image/")
-          ? imageDataUrl
-          : undefined,
-    });
-    const igmerProcessed = await processOutboxEvent(igmerIngested.outboxEvent.eventId);
 
     return NextResponse.json(
       {

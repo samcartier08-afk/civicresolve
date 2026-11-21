@@ -36,9 +36,13 @@ import {
 import {
   checkRateLimit,
   escapeCsvCell,
+  listAuditLogs,
   resetRateLimitStore,
   sanitizeApiError,
+  validateImageMagicBytesAndSize,
+  verifyRoleGuard,
 } from "../src/lib/security.ts";
+import { TRANSLATIONS } from "../src/lib/i18n.ts";
 import { getMongoDbUriInfo } from "../src/lib/mongodb.ts";
 import { GEMINI_MODELS, resolveModel } from "../src/lib/gemini.ts";
 
@@ -522,5 +526,73 @@ describe("Security Hardening Utilities", () => {
     const info = getMongoDbUriInfo();
     assert.ok(typeof info.connected === "boolean");
     assert.ok(typeof info.uri === "string");
+  });
+
+  it("enforces RBAC role guards and validates JPEG/PNG/WebP magic bytes", () => {
+    const citizenReq = new Request("http://localhost/api/issues", {
+      headers: { "x-civic-role": "citizen", "x-civic-uid": "cit_10" },
+    });
+    const blocked = verifyRoleGuard(citizenReq, ["authority", "admin"]);
+    assert.equal(blocked.allowed, false);
+
+    const adminReq = new Request("http://localhost/api/issues", {
+      headers: { "x-civic-role": "admin", "x-civic-uid": "adm_1" },
+    });
+    assert.equal(verifyRoleGuard(adminReq, ["authority", "admin"]).allowed, true);
+
+    // Valid PNG magic bytes (89 50 4E 47 0D 0A 1A 0A) in base64: iVBORw0KGgo=
+    const validPng = validateImageMagicBytesAndSize("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
+    assert.equal(validPng.valid, true);
+    assert.equal(validPng.detectedMime, "image/png");
+
+    // Invalid executable/text bytes rejected
+    const invalidBytes = validateImageMagicBytesAndSize(Buffer.from("MZ_EXECUTABLE_HEADER").toString("base64"));
+    assert.equal(invalidBytes.valid, false);
+  });
+
+  it("strips internal authority notes from citizen views and supports citizen verify/dispute lifecycle", () => {
+    resetIssueStoreForTests();
+    updateIssue("CR-2026-1001", {
+      status: "Resolved",
+      adminNote: "Public repair complete.",
+      internalNote: "CONFIDENTIAL_CONTRACTOR_AUDIT_99",
+    });
+
+    // Citizen view must never expose internalNote
+    const citizenView = getIssueById("CR-2026-1001", false);
+    assert.ok(citizenView);
+    assert.equal(
+      citizenView.timeline.some((e) => e.internalNote !== undefined),
+      false
+    );
+
+    // Authority view preserves internalNote
+    const authorityView = getIssueById("CR-2026-1001", true);
+    assert.equal(
+      authorityView?.timeline.some(
+        (e) => e.internalNote === "CONFIDENTIAL_CONTRACTOR_AUDIT_99"
+      ),
+      true
+    );
+
+    // Citizen disputes resolution -> status transitions to Reopened
+    const disputed = updateIssue("CR-2026-1001", {
+      citizenAction: "DISPUTE_REOPEN",
+      citizenFeedback: "Water leak still visible.",
+    });
+    assert.equal(disputed?.status, "Reopened");
+
+    // Citizen confirms resolution -> status transitions to Citizen Verified
+    const verified = updateIssue("CR-2026-1001", {
+      citizenAction: "VERIFY_RESOLUTION",
+    });
+    assert.equal(verified?.status, "Citizen Verified");
+    assert.ok(listAuditLogs().length >= 1);
+  });
+
+  it("provides complete English, Tamil, and Hindi UI translations", () => {
+    assert.ok(TRANSLATIONS.en.reportForm.submitButton.length > 0);
+    assert.ok(TRANSLATIONS.ta.reportForm.submitButton.length > 0);
+    assert.ok(TRANSLATIONS.hi.reportForm.submitButton.length > 0);
   });
 });

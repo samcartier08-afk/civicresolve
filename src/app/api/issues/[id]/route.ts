@@ -5,9 +5,15 @@ import {
   deleteIssue,
   getIssueById,
   isValidIssueId,
+  listCitizenNotifications,
   updateIssue,
 } from "@/lib/issue-store";
-import { checkRateLimit, getClientIdentifier, sanitizeApiError } from "@/lib/security";
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  listAuditLogs,
+  sanitizeApiError,
+} from "@/lib/security";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -32,7 +38,7 @@ export async function PATCH(req: Request, context: RouteContext) {
     const rate = checkRateLimit(`update-issue:${getClientIdentifier(req)}`, 40, 60_000);
     if (!rate.allowed) {
       return NextResponse.json(
-        { error: "Too many admin updates. Please wait a moment." },
+        { error: "Too many updates. Please wait a moment." },
         { status: 429, headers: { "Retry-After": String(rate.retryAfterSeconds) } }
       );
     }
@@ -56,7 +62,12 @@ export async function PATCH(req: Request, context: RouteContext) {
       return NextResponse.json({ error: "Issue not found." }, { status: 404 });
     }
 
-    return NextResponse.json({ issue: updated, stats: computeIssueStats() });
+    return NextResponse.json({
+      issue: updated,
+      stats: computeIssueStats(),
+      notifications: listCitizenNotifications(),
+      auditLogs: listAuditLogs(),
+    });
   } catch (err) {
     console.error("[PATCH /api/issues/[id]] Error:", err);
     const { message, status } = sanitizeApiError(err);

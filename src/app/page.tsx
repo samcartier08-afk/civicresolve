@@ -7,20 +7,25 @@ import {
   ClipboardList,
   Cpu,
   FilePlus2,
+  Globe,
   Landmark,
+  MapPin,
   MessageSquareText,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import type { CivicIssue, IssueStats } from "@/lib/civic-schemas";
+import type { CitizenNotification, CivicIssue, IssueStats } from "@/lib/civic-schemas";
+import { TRANSLATIONS, type SupportedLocale } from "@/lib/i18n";
+import type { AuditLogEntry } from "@/lib/security";
 import { FOCUS_RING } from "@/components/CivicBadges";
 import { ReportIssueTab } from "@/components/ReportIssueTab";
+import { NearbyMapTab } from "@/components/NearbyMapTab";
 import { TrackingDashboardTab } from "@/components/TrackingDashboardTab";
 import { AdminDashboardTab } from "@/components/AdminDashboardTab";
 import { CivicAssistantTab } from "@/components/CivicAssistantTab";
 import { IgmerLabTab } from "@/components/IgmerLabTab";
 
-type TabId = "report" | "igmer" | "track" | "admin" | "assistant";
+type TabId = "report" | "nearby" | "track" | "igmer" | "admin" | "assistant";
 
 type HealthState = {
   apiKeyConfigured: boolean;
@@ -32,26 +37,36 @@ const EMPTY_STATS: IssueStats = {
   reported: 0,
   inProgress: 0,
   resolved: 0,
+  citizenVerified: 0,
   criticalAndHigh: 0,
   resolutionRate: 0,
   byCategory: {},
+  byDepartment: {},
+  byWard: {},
 };
 
 export default function CivicResolveApp() {
+  const [locale, setLocale] = useState<SupportedLocale>("en");
+  const t = TRANSLATIONS[locale];
+
   const [activeTab, setActiveTab] = useState<TabId>("report");
   const [issues, setIssues] = useState<CivicIssue[]>([]);
   const [stats, setStats] = useState<IssueStats>(EMPTY_STATS);
+  const [notifications, setNotifications] = useState<CitizenNotification[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [health, setHealth] = useState<HealthState>(null);
   const [highlightedIssueId, setHighlightedIssueId] = useState<string | null>(null);
 
   const fetchIssues = useCallback(async () => {
     try {
-      const res = await fetch("/api/issues");
+      const res = await fetch("/api/issues?role=admin");
       if (!res.ok) return;
       const data = await res.json();
       setIssues(data.issues ?? []);
       setStats(data.stats ?? EMPTY_STATS);
+      setNotifications(data.notifications ?? []);
+      setAuditLogs(data.auditLogs ?? []);
     } finally {
       setLoading(false);
     }
@@ -74,6 +89,7 @@ export default function CivicResolveApp() {
   function handleIssueUpdated(updated: CivicIssue, nextStats: IssueStats) {
     setIssues((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
     setStats(nextStats);
+    fetchIssues();
   }
 
   function handleIssueDeleted(id: string, nextStats: IssueStats) {
@@ -87,16 +103,22 @@ export default function CivicResolveApp() {
     icon: typeof FilePlus2;
     badge?: number | string;
   }> = [
-    { id: "report", label: "Report Issue", icon: FilePlus2 },
-    { id: "igmer", label: "IGMER Clustering & Load Lab", icon: Cpu, badge: "IGMER" },
-    { id: "track", label: "Issue Tracker", icon: ClipboardList, badge: stats.total },
+    { id: "report", label: t.nav.report, icon: FilePlus2 },
+    { id: "nearby", label: t.nav.nearby, icon: MapPin, badge: stats.total },
+    {
+      id: "track",
+      label: t.nav.myReports,
+      icon: ClipboardList,
+      badge: notifications.length > 0 ? `${stats.total} · !` : stats.total,
+    },
+    { id: "igmer", label: t.nav.igmerLab, icon: Cpu, badge: "50x" },
     {
       id: "admin",
-      label: "Admin Dashboard",
+      label: t.nav.authority,
       icon: ShieldCheck,
       badge: stats.reported + stats.inProgress,
     },
-    { id: "assistant", label: "AI Civic Helper", icon: MessageSquareText },
+    { id: "assistant", label: t.nav.assistant, icon: MessageSquareText },
   ];
 
   return (
@@ -114,20 +136,48 @@ export default function CivicResolveApp() {
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-200">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              IGMER Algorithm · Ingest-First Geospatial Multimodal Entity Resolution
+              {t.syntheticBanner}
             </div>
             <div className="flex items-center gap-2.5">
               <Landmark className="h-7 w-7 text-indigo-400" aria-hidden="true" />
               <h1 className="text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                CivicResolve
+                {t.appName}
               </h1>
             </div>
-            <p className="mt-1 max-w-2xl text-sm text-slate-300">
-              Citizen-first ingest architecture with Transactional Outbox, PostGIS + pgvector multimodal incident clustering, advisory-locked concurrency, and Google Gemini triage.
-            </p>
+            <p className="mt-1 max-w-2xl text-sm text-slate-300">{t.tagline}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* i18n Multilingual Selector (English / Tamil / Hindi) */}
+            <div
+              role="group"
+              aria-label="Interface language"
+              className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-slate-950 px-2 py-1"
+            >
+              <Globe className="ml-1 h-3.5 w-3.5 text-cyan-300" aria-hidden="true" />
+              {(
+                [
+                  { code: "en", label: "English" },
+                  { code: "ta", label: "தமிழ்" },
+                  { code: "hi", label: "हिन्दी" },
+                ] as const
+              ).map((lang) => (
+                <button
+                  key={lang.code}
+                  type="button"
+                  aria-pressed={locale === lang.code}
+                  onClick={() => setLocale(lang.code)}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition ${FOCUS_RING} ${
+                    locale === lang.code
+                      ? "bg-indigo-600 text-white"
+                      : "text-slate-300 hover:text-white"
+                  }`}
+                >
+                  {lang.label}
+                </button>
+              ))}
+            </div>
+
             <div
               role="status"
               aria-live="polite"
@@ -145,7 +195,7 @@ export default function CivicResolveApp() {
               ) : (
                 <>
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                  Ingest-First Resilient Mode (Set GEMINI_API_KEY)
+                  Ingest-First Resilient Mode
                 </>
               )}
             </div>
@@ -171,7 +221,7 @@ export default function CivicResolveApp() {
                   aria-selected={selected}
                   aria-controls={`panel-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${FOCUS_RING} ${
+                  className={`inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${FOCUS_RING} ${
                     selected
                       ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
                       : "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
@@ -201,6 +251,7 @@ export default function CivicResolveApp() {
           {activeTab === "report" && (
             <div id="panel-report" role="tabpanel" aria-labelledby="tab-report">
               <ReportIssueTab
+                t={t}
                 onIssueCreated={handleIssueCreated}
                 onNavigateToTracker={(issueId) => {
                   setHighlightedIssueId(issueId);
@@ -210,9 +261,16 @@ export default function CivicResolveApp() {
             </div>
           )}
 
-          {activeTab === "igmer" && (
-            <div id="panel-igmer" role="tabpanel" aria-labelledby="tab-igmer">
-              <IgmerLabTab />
+          {activeTab === "nearby" && (
+            <div id="panel-nearby" role="tabpanel" aria-labelledby="tab-nearby">
+              <NearbyMapTab
+                issues={issues}
+                t={t}
+                onSelectIssue={(issueId) => {
+                  setHighlightedIssueId(issueId);
+                  setActiveTab("track");
+                }}
+              />
             </div>
           )}
 
@@ -224,11 +282,20 @@ export default function CivicResolveApp() {
                 </div>
               ) : (
                 <TrackingDashboardTab
+                  t={t}
                   issues={issues}
                   stats={stats}
+                  notifications={notifications}
                   highlightedIssueId={highlightedIssueId}
+                  onIssueUpdated={handleIssueUpdated}
                 />
               )}
+            </div>
+          )}
+
+          {activeTab === "igmer" && (
+            <div id="panel-igmer" role="tabpanel" aria-labelledby="tab-igmer">
+              <IgmerLabTab />
             </div>
           )}
 
@@ -236,6 +303,8 @@ export default function CivicResolveApp() {
             <div id="panel-admin" role="tabpanel" aria-labelledby="tab-admin">
               <AdminDashboardTab
                 issues={issues}
+                stats={stats}
+                auditLogs={auditLogs}
                 onIssueUpdated={handleIssueUpdated}
                 onIssueDeleted={handleIssueDeleted}
               />
@@ -250,7 +319,7 @@ export default function CivicResolveApp() {
         </main>
 
         <footer className="mt-10 border-t border-white/10 pt-5 text-center text-xs text-slate-400">
-          CivicResolve — IGMER (Ingest-First Geospatial Multimodal Entity Resolution) · Google Gemini & Cloud Run
+          CivicResolve — IGMER Geospatial Multimodal Entity Resolution · Google Gemini · Cloud Run & Firebase
         </footer>
       </div>
     </>

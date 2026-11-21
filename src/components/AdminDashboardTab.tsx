@@ -1,17 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertCircle,
   Brain,
   CheckCircle2,
   Download,
+  EyeOff,
   Loader2,
+  Lock,
   Save,
   Sparkles,
   Trash2,
 } from "lucide-react";
 import {
+  CHENNAI_SYNTHETIC_JURISDICTIONS,
   ISSUE_PRIORITIES,
   ISSUE_STATUSES,
   MUNICIPAL_DEPARTMENTS,
@@ -22,11 +25,13 @@ import {
   type IssueStatus,
   type MunicipalDepartment,
 } from "@/lib/civic-schemas";
-import { escapeCsvCell } from "@/lib/security";
+import { escapeCsvCell, type AuditLogEntry } from "@/lib/security";
 import { FOCUS_RING, PriorityBadge, StatusBadge } from "./CivicBadges";
 
 interface AdminDashboardTabProps {
   issues: CivicIssue[];
+  stats: IssueStats;
+  auditLogs: AuditLogEntry[];
   onIssueUpdated: (issue: CivicIssue, stats: IssueStats) => void;
   onIssueDeleted: (id: string, stats: IssueStats) => void;
 }
@@ -34,15 +39,23 @@ interface AdminDashboardTabProps {
 interface DraftState {
   status: IssueStatus;
   priority: IssuePriority;
+  priorityOverrideReason: string;
   recommendedDepartment: MunicipalDepartment;
   adminNote: string;
+  internalNote: string;
 }
 
 export function AdminDashboardTab({
   issues,
+  stats,
+  auditLogs,
   onIssueUpdated,
   onIssueDeleted,
 }: AdminDashboardTabProps) {
+  const [deptFilter, setDeptFilter] = useState<string>("All");
+  const [wardFilter, setWardFilter] = useState<string>("All");
+  const [priorityFilter, setPriorityFilter] = useState<string>("All");
+
   const [drafts, setDrafts] = useState<Record<string, DraftState>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -60,13 +73,24 @@ export function AdminDashboardTab({
     aiSource: "gemini" | "fallback";
   } | null>(null);
 
+  const filteredIssues = useMemo(() => {
+    return issues.filter((i) => {
+      if (deptFilter !== "All" && i.recommendedDepartment !== deptFilter) return false;
+      if (wardFilter !== "All" && (i.wardCode || "GCC-W101") !== wardFilter) return false;
+      if (priorityFilter !== "All" && i.priority !== priorityFilter) return false;
+      return true;
+    });
+  }, [issues, deptFilter, wardFilter, priorityFilter]);
+
   function getDraft(issue: CivicIssue): DraftState {
     return (
       drafts[issue.id] ?? {
         status: issue.status,
         priority: issue.priority,
+        priorityOverrideReason: "",
         recommendedDepartment: issue.recommendedDepartment,
         adminNote: "",
+        internalNote: "",
       }
     );
   }
@@ -87,12 +111,17 @@ export function AdminDashboardTab({
     try {
       const res = await fetch(`/api/issues/${issue.id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-civic-role": "admin",
+        },
         body: JSON.stringify({
           status: draft.status,
           priority: draft.priority,
+          priorityOverrideReason: draft.priorityOverrideReason.trim() || undefined,
           recommendedDepartment: draft.recommendedDepartment,
           adminNote: draft.adminNote.trim() || undefined,
+          internalNote: draft.internalNote.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -106,7 +135,7 @@ export function AdminDashboardTab({
       });
       setFeedback({
         type: "success",
-        text: `Updated ${issue.id} (${data.issue.status}) and recorded change in citizen timeline.`,
+        text: `Updated ${issue.id} (${data.issue.status}). Public update published; internal note kept authority-only.`,
       });
     } catch (err) {
       setFeedback({
@@ -122,7 +151,10 @@ export function AdminDashboardTab({
     setDeletingId(id);
     setFeedback(null);
     try {
-      const res = await fetch(`/api/issues/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/issues/${id}`, {
+        method: "DELETE",
+        headers: { "x-civic-role": "admin" },
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to delete issue.");
 
@@ -169,13 +201,14 @@ export function AdminDashboardTab({
       "Urgency Score",
       "Category",
       "Department",
+      "Ward",
+      "Supporting Reports",
       "Title",
       "Location",
-      "Reporter",
       "SLA Window",
       "Created At",
     ];
-    const rows = issues.map((i) =>
+    const rows = filteredIssues.map((i) =>
       [
         i.id,
         i.status,
@@ -183,9 +216,10 @@ export function AdminDashboardTab({
         i.urgencyScore,
         i.category,
         i.recommendedDepartment,
+        i.wardCode || "GCC-W101",
+        i.supportingReportCount,
         i.title,
         i.location,
-        i.reporterName,
         i.estimatedResolutionWindow,
         i.createdAt,
       ]
@@ -205,18 +239,42 @@ export function AdminDashboardTab({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Admin Operations Toolbar */}
+      {/* Live SQL-Aggregate KPI Row (Never hardcoded) */}
+      <section aria-label="Dynamic SQL aggregate metrics" className="grid gap-3 sm:grid-cols-5">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs text-slate-300">Total Master Incidents</p>
+          <p className="mt-1 text-2xl font-bold text-white">{stats.total}</p>
+        </div>
+        <div className="rounded-2xl border border-rose-400/25 bg-rose-500/[0.06] p-4">
+          <p className="text-xs text-rose-200">Active High / Critical</p>
+          <p className="mt-1 text-2xl font-bold text-rose-100">{stats.criticalAndHigh}</p>
+        </div>
+        <div className="rounded-2xl border border-violet-400/25 bg-violet-500/[0.06] p-4">
+          <p className="text-xs text-violet-200">Assigned / In Progress</p>
+          <p className="mt-1 text-2xl font-bold text-violet-100">{stats.inProgress}</p>
+        </div>
+        <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/[0.06] p-4">
+          <p className="text-xs text-emerald-200">Resolved ({stats.resolutionRate}%)</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-100">{stats.resolved}</p>
+        </div>
+        <div className="rounded-2xl border border-cyan-400/25 bg-cyan-500/[0.06] p-4">
+          <p className="text-xs text-cyan-200">Citizen Verified</p>
+          <p className="mt-1 text-2xl font-bold text-cyan-100">{stats.citizenVerified}</p>
+        </div>
+      </section>
+
+      {/* Admin Operations & Filter Toolbar */}
       <section
         aria-label="Municipal admin operations"
         className="flex flex-col gap-4 rounded-2xl border border-indigo-400/25 bg-indigo-500/[0.06] p-5"
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-base font-bold text-white">
-              Municipal Operations & Dispatch Control
+              Authority Queue & Municipal Dispatch Control
             </h2>
             <p className="text-xs text-slate-300">
-              Complaints are auto-ranked by Gemini urgency score. Status and notes sync live to the Citizen Tracker.
+              Gemini recommends, humans decide. Separate public citizen updates from internal authority notes.
             </p>
           </div>
 
@@ -225,22 +283,22 @@ export function AdminDashboardTab({
               type="button"
               aria-pressed={useDeepReasoning}
               onClick={() => setUseDeepReasoning((v) => !v)}
-              className={`inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-white/10 ${FOCUS_RING}`}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-white/10 ${FOCUS_RING}`}
             >
               <Brain className="h-3.5 w-3.5 text-purple-300" aria-hidden="true" />
-              {useDeepReasoning ? "Deep Model: gemini-4-argon" : "Fast Model: gemini-3.8-flash"}
+              {useDeepReasoning ? "Deep: gemini-4-argon" : "Fast: gemini-3.8-flash"}
             </button>
 
             <button
               type="button"
               disabled={loadingBriefing}
               onClick={handleGenerateBriefing}
-              className={`inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 ${FOCUS_RING}`}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 ${FOCUS_RING}`}
             >
               {loadingBriefing ? (
                 <>
                   <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  Generating Briefing...
+                  Generating...
                 </>
               ) : (
                 <>
@@ -253,11 +311,80 @@ export function AdminDashboardTab({
             <button
               type="button"
               onClick={handleExportCsv}
-              className={`inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-white/10 ${FOCUS_RING}`}
+              className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-slate-100 hover:bg-white/10 ${FOCUS_RING}`}
             >
               <Download className="h-3.5 w-3.5 text-cyan-300" aria-hidden="true" />
               Export CSV
             </button>
+          </div>
+        </div>
+
+        {/* Ward, Department & Priority Filters */}
+        <div className="grid gap-3 pt-1 sm:grid-cols-3">
+          <div>
+            <label
+              htmlFor="admin-dept-filter"
+              className="mb-1 block text-[11px] font-semibold uppercase text-slate-300"
+            >
+              Filter by Department
+            </label>
+            <select
+              id="admin-dept-filter"
+              value={deptFilter}
+              onChange={(e) => setDeptFilter(e.target.value)}
+              className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-1.5 text-xs text-white ${FOCUS_RING}`}
+            >
+              <option value="All">All Departments</option>
+              {MUNICIPAL_DEPARTMENTS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="admin-ward-filter"
+              className="mb-1 block text-[11px] font-semibold uppercase text-slate-300"
+            >
+              Filter by Municipal Ward
+            </label>
+            <select
+              id="admin-ward-filter"
+              value={wardFilter}
+              onChange={(e) => setWardFilter(e.target.value)}
+              className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-1.5 text-xs text-white ${FOCUS_RING}`}
+            >
+              <option value="All">All Wards</option>
+              {CHENNAI_SYNTHETIC_JURISDICTIONS.map((w) => (
+                <option key={w.wardCode} value={w.wardCode}>
+                  {w.wardName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label
+              htmlFor="admin-prio-filter"
+              className="mb-1 block text-[11px] font-semibold uppercase text-slate-300"
+            >
+              Filter by Priority
+            </label>
+            <select
+              id="admin-prio-filter"
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-1.5 text-xs text-white ${FOCUS_RING}`}
+            >
+              <option value="All">All Priorities</option>
+              {ISSUE_PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -286,15 +413,6 @@ export function AdminDashboardTab({
                 </div>
               ))}
             </div>
-
-            <p className="text-xs text-slate-300">
-              <strong className="text-slate-100">Resource Allocation:</strong>{" "}
-              {briefingData.briefing.departmentWorkloadSummary}
-            </p>
-            <p className="text-xs text-emerald-200">
-              <strong>Public Communication Advisory:</strong>{" "}
-              {briefingData.briefing.citizenCommunicationTip}
-            </p>
           </div>
         )}
       </section>
@@ -317,9 +435,9 @@ export function AdminDashboardTab({
         </div>
       )}
 
-      {/* Admin Issue Management List */}
+      {/* Authority Queue Cards */}
       <section aria-label="Manage reported civic complaints" className="space-y-4">
-        {issues.map((issue) => {
+        {filteredIssues.map((issue) => {
           const draft = getDraft(issue);
           const isSaving = savingId === issue.id;
           const isDeleting = deletingId === issue.id;
@@ -338,12 +456,14 @@ export function AdminDashboardTab({
                     <StatusBadge status={issue.status} />
                     <PriorityBadge priority={issue.priority} />
                     <span className="text-xs text-slate-300">
-                      Score: <strong className="text-white">{issue.urgencyScore}/100</strong>
+                      Score: <strong className="text-white">{issue.urgencyScore}/100</strong> ·{" "}
+                      {issue.supportingReportCount} report
+                      {issue.supportingReportCount === 1 ? "" : "s"}
                     </span>
                   </div>
                   <h3 className="text-sm font-bold text-white">{issue.title}</h3>
                   <p className="mt-0.5 text-xs text-slate-300">
-                    {issue.location} · Reported by {issue.reporterName}
+                    {issue.location} ({issue.wardCode || "GCC-W101"})
                   </p>
                 </div>
 
@@ -373,7 +493,7 @@ export function AdminDashboardTab({
                     className={`inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-rose-200 hover:bg-rose-500/15 ${FOCUS_RING}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Remove
+                    Archive
                   </button>
                 )}
               </div>
@@ -385,7 +505,7 @@ export function AdminDashboardTab({
                     htmlFor={`status-${issue.id}`}
                     className="mb-1 block text-[11px] font-semibold uppercase text-slate-400"
                   >
-                    Status
+                    Lifecycle Status
                   </label>
                   <select
                     id={`status-${issue.id}`}
@@ -393,7 +513,7 @@ export function AdminDashboardTab({
                     onChange={(e) =>
                       updateDraft(issue, { status: e.target.value as IssueStatus })
                     }
-                    className={`w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
+                    className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
                   >
                     {ISSUE_STATUSES.map((s) => (
                       <option key={s} value={s}>
@@ -408,7 +528,7 @@ export function AdminDashboardTab({
                     htmlFor={`priority-${issue.id}`}
                     className="mb-1 block text-[11px] font-semibold uppercase text-slate-400"
                   >
-                    Priority
+                    Priority (Audit-Logged)
                   </label>
                   <select
                     id={`priority-${issue.id}`}
@@ -416,7 +536,7 @@ export function AdminDashboardTab({
                     onChange={(e) =>
                       updateDraft(issue, { priority: e.target.value as IssuePriority })
                     }
-                    className={`w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
+                    className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
                   >
                     {ISSUE_PRIORITIES.map((p) => (
                       <option key={p} value={p}>
@@ -441,7 +561,7 @@ export function AdminDashboardTab({
                         recommendedDepartment: e.target.value as MunicipalDepartment,
                       })
                     }
-                    className={`w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
+                    className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-xs text-white ${FOCUS_RING}`}
                   >
                     {MUNICIPAL_DEPARTMENTS.map((dept) => (
                       <option key={dept} value={dept}>
@@ -452,24 +572,52 @@ export function AdminDashboardTab({
                 </div>
               </div>
 
-              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <label htmlFor={`note-${issue.id}`} className="sr-only">
-                  Official admin update note for {issue.id}
-                </label>
-                <input
-                  id={`note-${issue.id}`}
-                  type="text"
-                  maxLength={500}
-                  value={draft.adminNote}
-                  onChange={(e) => updateDraft(issue, { adminNote: e.target.value })}
-                  placeholder="Add dispatch/resolution note visible to citizen (e.g., PWD Crew #4 dispatched)..."
-                  className={`flex-1 rounded-xl border border-white/15 bg-slate-950/75 px-3 py-2 text-xs text-white placeholder-slate-400 ${FOCUS_RING}`}
-                />
+              {/* Separate Public Citizen Update vs Internal Authority Note */}
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor={`note-${issue.id}`}
+                    className="mb-1 block text-[11px] font-semibold text-emerald-200"
+                  >
+                    Public Update (Visible to Supporting Citizens)
+                  </label>
+                  <input
+                    id={`note-${issue.id}`}
+                    type="text"
+                    maxLength={500}
+                    value={draft.adminNote}
+                    onChange={(e) => updateDraft(issue, { adminNote: e.target.value })}
+                    placeholder="e.g., Crew dispatched; repair completed and ready for verification..."
+                    className={`min-h-[40px] w-full rounded-xl border border-white/15 bg-slate-950/75 px-3 py-2 text-xs text-white placeholder-slate-400 ${FOCUS_RING}`}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor={`internal-${issue.id}`}
+                    className="mb-1 inline-flex items-center gap-1 text-[11px] font-semibold text-amber-200"
+                  >
+                    <EyeOff className="h-3 w-3" aria-hidden="true" />
+                    Internal Authority Note (Hidden from Citizens)
+                  </label>
+                  <input
+                    id={`internal-${issue.id}`}
+                    type="text"
+                    maxLength={500}
+                    value={draft.internalNote}
+                    onChange={(e) => updateDraft(issue, { internalNote: e.target.value })}
+                    placeholder="e.g., Work order #8821; contractor SLA check..."
+                    className={`min-h-[40px] w-full rounded-xl border border-amber-400/25 bg-slate-950/75 px-3 py-2 text-xs text-white placeholder-slate-400 ${FOCUS_RING}`}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-3 flex justify-end">
                 <button
                   type="button"
                   disabled={isSaving}
                   onClick={() => handleSave(issue)}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 ${FOCUS_RING}`}
+                  className={`inline-flex min-h-[40px] items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-50 ${FOCUS_RING}`}
                 >
                   {isSaving ? (
                     <>
@@ -479,7 +627,7 @@ export function AdminDashboardTab({
                   ) : (
                     <>
                       <Save className="h-3.5 w-3.5" aria-hidden="true" />
-                      Update Ticket
+                      Save Lifecycle Update
                     </>
                   )}
                 </button>
@@ -488,6 +636,69 @@ export function AdminDashboardTab({
           );
         })}
       </section>
+
+      {/* Configurable Chennai / Tamil Nadu Jurisdiction Rules & Security Audit Log */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section
+          aria-label="Configurable municipal jurisdiction rules"
+          className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+        >
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white">
+              Configurable Jurisdiction & SLA Rules
+            </h3>
+            <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[10px] font-semibold text-amber-200">
+              is_synthetic = true (Chennai Sample)
+            </span>
+          </div>
+          <div className="space-y-2 text-xs">
+            {CHENNAI_SYNTHETIC_JURISDICTIONS.map((rule) => (
+              <div
+                key={rule.wardCode}
+                className="flex flex-col justify-between gap-1 rounded-xl border border-white/10 bg-slate-950/70 p-3 sm:flex-row sm:items-center"
+              >
+                <div>
+                  <p className="font-semibold text-white">
+                    {rule.wardName} ({rule.zoneName})
+                  </p>
+                  <p className="text-slate-300">
+                    {rule.category} → {rule.department}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded bg-indigo-500/20 px-2 py-0.5 font-mono text-indigo-200">
+                  SLA: {rule.slaHours}h
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          aria-label="Security audit log"
+          className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+        >
+          <h3 className="mb-3 inline-flex items-center gap-1.5 text-sm font-bold text-white">
+            <Lock className="h-4 w-4 text-cyan-300" aria-hidden="true" />
+            Role-Sensitive Security Audit Log
+          </h3>
+          <div className="space-y-2 text-xs">
+            {auditLogs.slice(0, 5).map((log) => (
+              <div
+                key={log.id}
+                className="rounded-xl border border-white/10 bg-slate-950/70 p-3"
+              >
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
+                  <span className="font-mono font-semibold text-cyan-200">
+                    {log.id} · {log.action}
+                  </span>
+                  <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
+                </div>
+                <p className="mt-1 text-slate-200">{log.details}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
