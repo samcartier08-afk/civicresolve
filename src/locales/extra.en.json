@@ -1,29 +1,125 @@
 {
   "auth": {
-    "signIn": "Sign in", "register": "Create account", "name": "Full name", "email": "Email", "password": "Password",
-    "passwordHint": "At least 8 characters.", "google": "Continue with Google", "or": "or", "forgot": "Forgot password?",
+    "signIn": "Sign in",
+    "register": "Create account",
+    "name": "Full name",
+    "email": "Email",
+    "password": "Password",
+    "passwordHint": "At least 8 characters.",
+    "google": "Continue with Google",
+    "or": "or",
+    "forgot": "Forgot password?",
     "resetSent": "If {{email}} has an account, we've sent a reset link. Check your inbox.",
-    "haveAccount": "Already have an account?", "noAccount": "New here?",
-    "subtitleLogin": "Sign in to track your reports.", "subtitleRegister": "Create an account to report problems and follow them until they're fixed.",
+    "haveAccount": "Already have an account?",
+    "noAccount": "New here?",
+    "subtitleLogin": "Sign in to track your reports.",
+    "subtitleRegister": "Create an account to report problems and follow them until they're fixed.",
     "errors": {
       "invalid": "That email and password don't match. Check them and try again.",
       "exists": "An account with this email already exists. Try signing in instead.",
       "network": "We couldn't reach the server. Check your connection and try again.",
       "generic": "Something went wrong. Please try again.",
-      "name": "Enter your name.", "email": "Enter a valid email address.", "password": "Use at least 8 characters.",
-      "profileTitle": "We couldn't load your account", "profile": "Check your connection, then try again."
+      "name": "Enter your name.",
+      "email": "Enter a valid email address.",
+      "password": "Use at least 8 characters.",
+      "profileTitle": "We couldn't load your account",
+      "profile": "Check your connection, then try again."
     }
   },
   "camera": {
-    "take": "Take a photo", "title": "Take a photo", "shutter": "Take photo", "flip": "Switch camera", "done": "Done", "close": "Close",
-    "captured_one": "{{count}} photo taken", "captured_other": "{{count}} photos taken",
+    "take": "Take a photo",
+    "title": "Take a photo",
+    "shutter": "Take photo",
+    "flip": "Switch camera",
+    "done": "Done",
+    "close": "Close",
+    "captured_one": "{{count}} photo taken",
+    "captured_other": "{{count}} photos taken",
     "denied": "Camera access is off. Allow it in your browser settings, or use Add a photo to pick one from your gallery.",
     "unavailable": "We couldn't start the camera. Use Add a photo to pick one from your gallery.",
     "error": "We couldn't take that photo. Try again."
   },
   "portal": {
-    "authority": "Department portal", "admin": "Admin portal", "queue": "Incident queue", "overview": "Overview",
-    "allIncidents": "All incidents", "signOut": "Sign out", "backToList": "Back to incidents",
-    "detailErrorTitle": "We couldn't load this incident", "detailErrorHint": "Check your connection, then try again."
+    "authority": "Department portal",
+    "admin": "Admin portal",
+    "queue": "Incident queue",
+    "overview": "Overview",
+    "allIncidents": "All incidents",
+    "signOut": "Sign out",
+    "backToList": "Back to incidents",
+    "detailErrorTitle": "We couldn't load this incident",
+    "detailErrorHint": "Check your connection, then try again."
+  },
+  "suggest": {
+    "title": "Not sure what to write?",
+    "hint": "Tap a suggestion to add it. You can edit it afterwards.",
+    "more": "Show more suggestions",
+    "less": "Show fewer",
+    "added": "Added to your description",
+    "items": [
+      "There is a large pothole on the road. It is dangerous for bikes and cars.",
+      "Garbage has piled up here and hasn't been collected for days.",
+      "A water pipe is leaking and water is flowing onto the road.",
+      "The streetlight isn't working, so this street is dark at night.",
+      "There is an open manhole on the road. It is a danger to people and vehicles.",
+      "Sewage is overflowing onto the street.",
+      "A drain is blocked and water is collecting on the road.",
+      "A fallen tree is blocking the road.",
+      "The traffic signal at this junction isn't working.",
+      "Stray animals are causing a problem here."
+    ]
+  },
+  "pages": {
+    "home": {
+      "title": "See a problem? Report it.",
+      "body": "Take a photo, tell us where it is, and we'll send it to the right department. You can follow it until it's fixed.",
+      "cta": "Report a problem",
+      "signIn": "Sign in",
+      "register": "Create account",
+      "how": "How it works",
+      "how1": "Take a photo or describe the problem",
+      "how2": "Tell us where it is",
+      "how3": "Follow it until it's fixed"
+    },
+    "nearby": {
+      "title": "Issues near you",
+      "intro": "See problems that people have reported close to you.",
+      "consent": "We use your location only to find nearby issues.",
+      "button": "Show issues near me",
+      "locating": "Finding your location",
+      "away": "{{distance}} away",
+      "emptyTitle": "No reported issues nearby",
+      "emptyHint": "Nothing within 1 km yet. If you see a problem, report it.",
+      "errorTitle": "We couldn't load nearby issues",
+      "errorHint": "Check your connection, then try again.",
+      "geoError": "We couldn't get your location. Allow location access and try again."
+    },
+    "myReports": {
+      "title": "My reports",
+      "emptyTitle": "You haven't reported anything yet",
+      "emptyHint": "When you report a problem, you can follow it here.",
+      "emptyAction": "Report a problem",
+      "errorTitle": "We couldn't load your reports",
+      "errorHint": "Check your connection, then try again.",
+      "tracking": "Tracking ID {{id}}",
+      "incident": "Part of incident {{n}}",
+      "loadMore": "Show more"
+    },
+    "profile": {
+      "title": "Profile",
+      "name": "Name",
+      "email": "Email",
+      "role": "Account type",
+      "language": "Language",
+      "signOut": "Sign out",
+      "role_citizen": "Citizen",
+      "role_authority": "Department staff",
+      "role_admin": "Administrator"
+    },
+    "notFound": {
+      "title": "We can't find that page",
+      "hint": "Check the address, or go back home.",
+      "home": "Go home"
+    }
   }
 }

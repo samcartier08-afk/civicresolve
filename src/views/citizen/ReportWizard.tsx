@@ -40,6 +40,8 @@ export interface ReportWizardProps {
   }) => ReactNode;
   /** Optional extra photo sources (e.g. live camera). Receives the wizard's own add-photos handler. */
   photoExtras?: (add: (files: File[]) => void, disabled: boolean) => ReactNode;
+  /** Optional: shown once at least one photo is added. Lets the caller offer ready-made descriptions. */
+  photoSuggestions?: (ctx: { description: string; setDescription: (text: string) => void }) => ReactNode;
 }
 
 interface SpeechLike {
@@ -59,7 +61,7 @@ const STEP_FIELDS: (keyof ReportInput)[][] = [['description', 'images'], ['landm
 const field =
   'w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-[var(--ink)] placeholder:text-[#667085] aria-[invalid=true]:border-[var(--crit)]';
 
-export function ReportWizard({ onSubmit, mapSlot, photoExtras }: ReportWizardProps) {
+export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions }: ReportWizardProps) {
   const { t, i18n } = useTranslation();
   const reduce = useReducedMotion();
   const [step, setStep] = useState(0);
@@ -204,6 +206,7 @@ export function ReportWizard({ onSubmit, mapSlot, photoExtras }: ReportWizardPro
                 {photoExtras?.(addFiles, images.length >= MAX_IMG)}
                 </div>
                 <p className="mt-1 text-sm text-[var(--ink-2)]">{t('report.photoHint')}</p>
+                {images.length > 0 && photoSuggestions?.({ description: watch('description'), setDescription: (text) => setValue('description', text, { shouldValidate: true }) })}
               </div>
             </>
           )}
