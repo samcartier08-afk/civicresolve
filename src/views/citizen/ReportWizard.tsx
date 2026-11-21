@@ -81,6 +81,7 @@ export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions 
     resolver: zodResolver(reportSchema),
     defaultValues: { description: '', images: [], lat: null, lng: null, landmark: '', anonymous: false },
   });
+  // eslint-disable-next-line react-hooks/incompatible-library
   const images = watch('images');
   const lat = watch('lat');
   const lng = watch('lng');

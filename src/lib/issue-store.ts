@@ -331,7 +331,7 @@ function createSeedIssues(): CivicIssue[] {
 }
 
 let issuesCache: CivicIssue[] | null = null;
-let notificationsCache: CitizenNotification[] = [
+const notificationsCache: CitizenNotification[] = [
   {
     id: "NOTIF-2026-01",
     issueId: "CR-2026-1005",

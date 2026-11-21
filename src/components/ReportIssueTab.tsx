@@ -553,7 +553,6 @@ export function ReportIssueTab({
                       key={idx}
                       className="relative overflow-hidden rounded-xl border border-indigo-400/40 bg-slate-900 p-1"
                     >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={src}
                         alt={`Uploaded evidence photo ${idx + 1} of ${mediaPreviews.length}`}

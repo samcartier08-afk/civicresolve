@@ -49,59 +49,70 @@ function readDemoUser(): LocalSessionUser | null {
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<(User | LocalSessionUser) | null>(null);
-  const [me, setMe] = useState<Me | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    // 1. Check active Staff Portal session first
-    const staff = readStaffSession();
-    if (staff) {
-      setUser({
+function getInitialUserState(): { user: (User | LocalSessionUser) | null; me: Me | null; loading: boolean } {
+  const staff = readStaffSession();
+  if (staff) {
+    return {
+      user: {
         uid: staff.account.uid,
         email: staff.account.email,
         displayName: staff.account.name,
         role: staff.account.role,
-      });
-      setMe({ role: staff.account.role, name: staff.account.name });
-      setLoading(false);
-      return;
-    }
-
-    // 2. If real Firebase config is present, listen to Firebase Auth
-    if (hasRealFirebaseConfig) {
-      return onAuthStateChanged(auth, (u) => {
-        if (readStaffSession()) return;
-        setUser(u);
-        if (!u) {
-          setMe(null);
-          setError(false);
-          setLoading(false);
-        }
-      });
-    }
-
-    // 3. Local preview without Firebase keys: restore saved citizen session if any
+      },
+      me: { role: staff.account.role, name: staff.account.name },
+      loading: false,
+    };
+  }
+  if (!hasRealFirebaseConfig) {
     const savedDemo = readDemoUser();
     if (savedDemo) {
-      setUser(savedDemo);
-      setMe({ role: savedDemo.role, name: savedDemo.displayName });
+      return {
+        user: savedDemo,
+        me: { role: savedDemo.role, name: savedDemo.displayName },
+        loading: false,
+      };
     }
-    setLoading(false);
+    return { user: null, me: null, loading: false };
+  }
+  return { user: null, me: null, loading: true };
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const initial = useMemo(() => getInitialUserState(), []);
+  const [user, setUser] = useState<(User | LocalSessionUser) | null>(initial.user);
+  const [me, setMe] = useState<Me | null>(initial.me);
+  const [loading, setLoading] = useState(initial.loading);
+  const [error, setError] = useState(false);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!hasRealFirebaseConfig) return;
+    return onAuthStateChanged(auth, (u) => {
+      if (readStaffSession()) return;
+      setUser(u);
+      if (!u) {
+        setMe(null);
+        setError(false);
+        setLoading(false);
+      }
+    });
   }, []);
 
   useEffect(() => {
     if (!user) return;
     let live = true;
-    setLoading(true);
-    setError(false);
     api<Me>('/api/me')
-      .then((m) => live && setMe(m))
-      .catch(() => live && setError(true))
-      .finally(() => live && setLoading(false));
+      .then((m) => {
+        if (!live) return;
+        setMe(m);
+        setError(false);
+      })
+      .catch(() => {
+        if (live) setError(true);
+      })
+      .finally(() => {
+        if (live) setLoading(false);
+      });
     return () => { live = false; };
   }, [user, tick]);
 
@@ -161,7 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       loading,
       error,
-      retry: () => setTick((n) => n + 1),
+      retry: () => {
+        setLoading(true);
+        setTick((n) => n + 1);
+      },
       signOut,
       signInDemo,
       signInWithStaffKey,

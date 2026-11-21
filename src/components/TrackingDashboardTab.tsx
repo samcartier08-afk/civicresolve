@@ -45,7 +45,6 @@ interface TrackingDashboardTabProps {
 export function TrackingDashboardTab({
   t,
   issues,
-  stats,
   notifications,
   highlightedIssueId,
   onIssueUpdated,
@@ -346,7 +345,6 @@ export function TrackingDashboardTab({
                       {issue.mediaUrls && issue.mediaUrls.length > 0 && (
                         <div className="grid grid-cols-2 gap-2 pt-1">
                           {issue.mediaUrls.map((url, idx) => (
-                            // eslint-disable-next-line @next/next/no-img-element
                             <img
                               key={idx}
                               src={url}

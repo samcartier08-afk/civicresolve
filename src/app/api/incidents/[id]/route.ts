@@ -6,6 +6,7 @@ import {
   fromSitePriority,
   fromSiteStatus,
   issueToIncidentDetail,
+  requireActorRole,
   syncMyReportStatus,
   toSiteStatus,
 } from "@/lib/portal-store";
@@ -27,6 +28,11 @@ export async function GET(_req: Request, context: Context) {
 
 export async function PATCH(req: Request, context: Context) {
   try {
+    const authz = requireActorRole(req, ["authority", "admin"]);
+    if (!authz.ok) {
+      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    }
+
     const { id } = await context.params;
     if (!isValidIssueId(id)) {
       return NextResponse.json({ error: "Invalid incident ID." }, { status: 400 });

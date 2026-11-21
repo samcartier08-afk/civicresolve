@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
   AlertTriangle,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Cpu,

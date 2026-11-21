@@ -64,7 +64,12 @@ async def submit_citizen_report(
 
     _broadcast_sse(
         "report.persisted",
-        {"tracking_id": tracking_id, "ward_code": payload.ward_code},
+        {
+            "tracking_id": tracking_id,
+            "ward_code": payload.ward_code,
+            "idempotency_key": idempotency_key,
+            "actor_uid": user.uid,
+        },
     )
 
     return ReportCreateResponse(

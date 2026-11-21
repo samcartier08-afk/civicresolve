@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from typing import Any
 
-from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, status
 from PIL import Image
 from slowapi import Limiter
 from slowapi.util import get_remote_address

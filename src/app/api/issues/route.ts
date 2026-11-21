@@ -9,6 +9,7 @@ import {
   type IssueStatus,
 } from "@/lib/civic-schemas";
 import { ingestCitizenReport, processOutboxEvent } from "@/lib/igmer-engine";
+import { extractRequestActor } from "@/lib/portal-store";
 import {
   computeIssueStats,
   createIssue,
@@ -32,12 +33,9 @@ export async function GET(req: Request) {
   const department = searchParams.get("department") ?? undefined;
   const wardCode = searchParams.get("wardCode") ?? undefined;
   const search = searchParams.get("search") ?? undefined;
-  const roleHeader = (req.headers.get("x-civic-role") || "").toLowerCase();
+  const actor = extractRequestActor(req);
   const includeInternalNotes =
-    roleHeader === "authority" ||
-    roleHeader === "admin" ||
-    searchParams.get("role") === "authority" ||
-    searchParams.get("role") === "admin";
+    actor.role === "authority" || actor.role === "admin";
 
   const status =
     rawStatus && (ISSUE_STATUSES as readonly string[]).includes(rawStatus)

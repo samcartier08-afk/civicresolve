@@ -1,11 +1,11 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { CivicIssue, IssuePriority, IssueStatus, MunicipalDepartment } from "./civic-schemas";
-import type { PriorityKey, StatusKey } from "@/components/ui/StatusPill";
-import type { IncidentRow } from "@/components/authority/IncidentQueue";
-import type { NearbyRow, ReportRow } from "./reports";
-import { verifyStaffToken } from "./staff-auth";
+import type { CivicIssue, IssuePriority, IssueStatus, MunicipalDepartment } from "./civic-schemas.ts";
+import type { PriorityKey, StatusKey } from "../components/ui/StatusPill.tsx";
+import type { IncidentRow } from "../components/authority/IncidentQueue.tsx";
+import type { NearbyRow, ReportRow } from "./reports.ts";
+import { verifyStaffToken } from "./staff-auth.ts";
 
 export interface IncidentDetailRow extends IncidentRow {
   description: string;
@@ -205,7 +205,7 @@ export function extractRequestActor(req: Request): RequestActor {
     };
   }
 
-  // 2. Check Firebase Bearer ID token for authenticated citizens
+  // 2. Check Firebase Bearer ID token for authenticated users
   const authHeader = req.headers.get("authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
@@ -241,6 +241,35 @@ export function extractRequestActor(req: Request): RequestActor {
     role: "citizen",
     name: nameHeader || "Citizen",
   };
+}
+
+export function requireActorRole(
+  req: Request,
+  allowedRoles: Array<RequestActor["role"]>
+): { ok: true; actor: RequestActor } | { ok: false; status: 401 | 403; error: string } {
+  const actor = extractRequestActor(req);
+  const hasAuthCredential = Boolean(
+    req.headers.get("x-staff-token")?.trim() ||
+      req.headers.get("authorization")?.startsWith("Bearer ")
+  );
+
+  if (!hasAuthCredential && allowedRoles.every((r) => r !== "citizen")) {
+    return {
+      ok: false,
+      status: 401,
+      error: "Authentication required for staff or admin operations.",
+    };
+  }
+
+  if (!allowedRoles.includes(actor.role)) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Forbidden: requires role in [${allowedRoles.join(", ")}].`,
+    };
+  }
+
+  return { ok: true, actor };
 }
 
 export type { MunicipalDepartment };

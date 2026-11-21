@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -27,26 +27,21 @@ export function IncidentDetailPage() {
   const q = useIncident(id);
   const update = useUpdateIncident();
 
-  const [status, setStatus] = useState<StatusKey>('reported');
-  const [priority, setPriority] = useState<PriorityKey>('medium');
-  const [department, setDepartment] = useState<string>('');
+  const [draftStatus, setDraftStatus] = useState<StatusKey | null>(null);
+  const [draftPriority, setDraftPriority] = useState<PriorityKey | null>(null);
+  const [draftDept, setDraftDept] = useState<string | null>(null);
   const [publicComment, setPublicComment] = useState('');
-  const [resolutionPhotoUrl, setResolutionPhotoUrl] = useState<string | undefined>(undefined);
-
-  useEffect(() => {
-    if (q.data) {
-      setStatus(q.data.status);
-      setPriority(q.data.priority);
-      setDepartment(q.data.department);
-      setResolutionPhotoUrl(q.data.resolutionPhotoUrl);
-    }
-  }, [q.data]);
+  const [draftPhotoUrl, setDraftPhotoUrl] = useState<string | null>(null);
 
   const back = me?.role === 'admin' ? '/admin/incidents' : '/authority';
   if (q.isPending) return <Skeleton className="h-40" />;
   if (q.isError) return <ErrorState title={t('detailErrorTitle')} hint={t('detailErrorHint')} onRetry={() => void q.refetch()} />;
 
   const r = q.data;
+  const status = draftStatus ?? r.status;
+  const priority = draftPriority ?? r.priority;
+  const department = draftDept ?? r.department;
+  const resolutionPhotoUrl = draftPhotoUrl ?? r.resolutionPhotoUrl;
 
   const handlePhotoSelect = (file: File | undefined) => {
     if (!file) return;
@@ -59,7 +54,7 @@ export function IncidentDetailPage() {
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setResolutionPhotoUrl(String(reader.result || ''));
+    reader.onload = () => setDraftPhotoUrl(String(reader.result || ''));
     reader.readAsDataURL(file);
   };
 
@@ -104,11 +99,11 @@ export function IncidentDetailPage() {
             Latest update: {r.resolutionNote}
           </p>
         )}
-        {r.resolutionPhotoUrl && (
+        {resolutionPhotoUrl && (
           <div>
             <p className="mb-1 text-sm font-medium text-[var(--ink-2)]">Resolution evidence photo</p>
             <img
-              src={r.resolutionPhotoUrl}
+              src={resolutionPhotoUrl}
               alt={`Resolution evidence for ${r.number}`}
               width={240}
               height={160}
@@ -130,7 +125,7 @@ export function IncidentDetailPage() {
             <select
               id="inc-status"
               value={status}
-              onChange={(e) => setStatus(e.target.value as StatusKey)}
+              onChange={(e) => setDraftStatus(e.target.value as StatusKey)}
               className="min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3"
             >
               {STATUS_OPTIONS.map((s) => (
@@ -148,7 +143,7 @@ export function IncidentDetailPage() {
             <select
               id="inc-priority"
               value={priority}
-              onChange={(e) => setPriority(e.target.value as PriorityKey)}
+              onChange={(e) => setDraftPriority(e.target.value as PriorityKey)}
               className="min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3"
             >
               {PRIORITY_OPTIONS.map((p) => (
@@ -167,7 +162,7 @@ export function IncidentDetailPage() {
           <select
             id="inc-dept"
             value={department}
-            onChange={(e) => setDepartment(e.target.value)}
+            onChange={(e) => setDraftDept(e.target.value)}
             className="min-h-11 w-full rounded-xl border border-[var(--line)] bg-white px-3"
           >
             {MUNICIPAL_DEPARTMENTS.map((dept) => (

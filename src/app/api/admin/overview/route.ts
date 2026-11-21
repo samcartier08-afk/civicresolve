@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { computeIssueStats, listIssues } from "@/lib/issue-store";
+import { requireActorRole } from "@/lib/portal-store";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const authz = requireActorRole(req, ["authority", "admin"]);
+  if (!authz.ok) {
+    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  }
+
   const issues = listIssues();
   const stats = computeIssueStats(issues);
 
