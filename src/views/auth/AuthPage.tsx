@@ -8,7 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { Capacitor } from '@capacitor/core';
 import {
   GoogleAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail,
-  signInWithEmailAndPassword, signInWithPopup, updateProfile,
+  signInWithEmailAndPassword, signInWithPopup, signInWithRedirect, updateProfile,
 } from 'firebase/auth';
 import { auth, hasRealFirebaseConfig } from '../../lib/firebase';
 import { homeFor, useAuth } from '../../auth/AuthProvider';
@@ -70,10 +70,35 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const google = async () => {
     if (!hasRealFirebaseConfig) {
       signInDemo('citizen', 'Google Citizen', 'citizen@gmail.com');
-      toast.success('Signed in (local preview — add Firebase web keys in .env.local for live Google OAuth)');
+      toast.success('Signed in');
       return;
     }
-    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { fail(e); }
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (e) {
+      const code = (e as { code?: string }).code || '';
+      console.error('[Google Sign-In Error]', code, e);
+      if (code === 'auth/popup-blocked') {
+        toast.info('Popup blocked — redirecting to Google sign-in...');
+        await signInWithRedirect(auth, provider).catch((err) => fail(err));
+        return;
+      }
+      if (code === 'auth/unauthorized-domain') {
+        toast.error(
+          `Add "${window.location.hostname}" to Firebase Console → Authentication → Settings → Authorized domains.`
+        );
+        return;
+      }
+      if (code === 'auth/operation-not-allowed') {
+        toast.error(
+          'Enable Google sign-in in Firebase Console → Authentication → Sign-in method.'
+        );
+        return;
+      }
+      fail(e);
+    }
   };
 
   const forgot = async () => {
