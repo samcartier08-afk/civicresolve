@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { computeIssueStats, listIssues } from "@/lib/issue-store";
-import { requireActorRole } from "@/lib/portal-store";
+import { extractRequestActor } from "@/lib/portal-store";
 
 export async function GET(req: Request) {
-  const authz = requireActorRole(req, ["authority", "admin"]);
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const actor = extractRequestActor(req);
+  if (actor.role !== "admin" && actor.role !== "authority") {
+    return NextResponse.json(
+      { error: "Forbidden: admin or authority role required." },
+      { status: 403 }
+    );
   }
 
   const issues = listIssues();

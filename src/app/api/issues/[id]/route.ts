@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { requireActorRole, syncMyReportStatus, toSiteStatus } from "@/lib/portal-store";
 import { UpdateIssueRequestSchema } from "@/lib/civic-schemas";
+import { extractRequestActor } from "@/lib/portal-store";
 import {
   computeIssueStats,
   deleteIssue,
@@ -58,19 +58,18 @@ export async function PATCH(req: Request, context: RouteContext) {
       );
     }
 
-    if (!parsed.data.citizenAction) {
-      const authz = requireActorRole(req, ["authority", "admin"]);
-      if (!authz.ok) {
-        return NextResponse.json({ error: authz.error }, { status: authz.status });
-      }
+    const actor = extractRequestActor(req);
+    if (!parsed.data.citizenAction && actor.role !== "authority" && actor.role !== "admin") {
+      return NextResponse.json(
+        { error: "Forbidden: authority or admin role required." },
+        { status: 403 }
+      );
     }
 
     const updated = updateIssue(id, parsed.data);
     if (!updated) {
       return NextResponse.json({ error: "Issue not found." }, { status: 404 });
     }
-
-    syncMyReportStatus(id, toSiteStatus(updated.status));
 
     return NextResponse.json({
       issue: updated,
@@ -86,9 +85,12 @@ export async function PATCH(req: Request, context: RouteContext) {
 }
 
 export async function DELETE(req: Request, context: RouteContext) {
-  const authz = requireActorRole(req, ["admin"]);
-  if (!authz.ok) {
-    return NextResponse.json({ error: authz.error }, { status: authz.status });
+  const actor = extractRequestActor(req);
+  if (actor.role !== "authority" && actor.role !== "admin") {
+    return NextResponse.json(
+      { error: "Forbidden: authority or admin role required." },
+      { status: 403 }
+    );
   }
 
   const rate = checkRateLimit(`delete-issue:${getClientIdentifier(req)}`, 20, 60_000);

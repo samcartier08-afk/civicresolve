@@ -3,10 +3,10 @@ import type { MunicipalDepartment } from "@/lib/civic-schemas";
 import type { PriorityKey, StatusKey } from "@/components/ui/StatusPill";
 import { getIssueById, isValidIssueId, updateIssue } from "@/lib/issue-store";
 import {
+  extractRequestActor,
   fromSitePriority,
   fromSiteStatus,
   issueToIncidentDetail,
-  requireActorRole,
   syncMyReportStatus,
   toSiteStatus,
 } from "@/lib/portal-store";
@@ -28,9 +28,12 @@ export async function GET(_req: Request, context: Context) {
 
 export async function PATCH(req: Request, context: Context) {
   try {
-    const authz = requireActorRole(req, ["authority", "admin"]);
-    if (!authz.ok) {
-      return NextResponse.json({ error: authz.error }, { status: authz.status });
+    const actor = extractRequestActor(req);
+    if (actor.role !== "authority" && actor.role !== "admin") {
+      return NextResponse.json(
+        { error: "Forbidden: authority or admin role required." },
+        { status: 403 }
+      );
     }
 
     const { id } = await context.params;
