@@ -38,6 +38,10 @@ export interface ReportWizardProps {
     lng: number | null;
     onPick: (lat: number, lng: number) => void;
   }) => ReactNode;
+  /** Optional extra photo sources (e.g. live camera). Receives the wizard's own add-photos handler. */
+  photoExtras?: (add: (files: File[]) => void, disabled: boolean) => ReactNode;
+  /** Optional: shown once at least one photo is added. Lets the caller offer ready-made descriptions. */
+  photoSuggestions?: (ctx: { description: string; setDescription: (text: string) => void }) => ReactNode;
 }
 
 interface SpeechLike {
@@ -57,7 +61,7 @@ const STEP_FIELDS: (keyof ReportInput)[][] = [['description', 'images'], ['landm
 const field =
   'w-full rounded-xl border border-[var(--line)] bg-white px-4 py-3 text-[var(--ink)] placeholder:text-[#667085] aria-[invalid=true]:border-[var(--crit)]';
 
-export function ReportWizard({ onSubmit, mapSlot }: ReportWizardProps) {
+export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions }: ReportWizardProps) {
   const { t, i18n } = useTranslation();
   const reduce = useReducedMotion();
   const [step, setStep] = useState(0);
@@ -83,7 +87,7 @@ export function ReportWizard({ onSubmit, mapSlot }: ReportWizardProps) {
 
   const msg = (k?: string) => (k ? t(k) : undefined);
 
-  const addFiles = (list: FileList | null) => {
+  const addFiles = (list: ArrayLike<File> | null) => {
     if (!list) return;
     const next = [...images];
     for (const f of Array.from(list)) {
@@ -193,12 +197,16 @@ export function ReportWizard({ onSubmit, mapSlot }: ReportWizardProps) {
                     </li>
                   ))}
                 </ul>
+                <div className="flex flex-wrap gap-2">
                 <label className={cn('inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-[var(--line)] bg-white px-4 font-medium focus-within:outline focus-within:outline-2 focus-within:outline-[var(--ai)]', images.length >= MAX_IMG && 'opacity-50')}>
                   <Camera aria-hidden className="size-4" />
                   {t('report.addPhoto')}
-                  <input type="file" accept={TYPES.join(',')} multiple capture="environment" disabled={images.length >= MAX_IMG} className="sr-only" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
+                  <input type="file" accept={TYPES.join(',')} multiple disabled={images.length >= MAX_IMG} className="sr-only" onChange={(e) => { addFiles(e.target.files); e.target.value = ''; }} />
                 </label>
+                {photoExtras?.(addFiles, images.length >= MAX_IMG)}
+                </div>
                 <p className="mt-1 text-sm text-[var(--ink-2)]">{t('report.photoHint')}</p>
+                {images.length > 0 && photoSuggestions?.({ description: watch('description'), setDescription: (text) => setValue('description', text, { shouldValidate: true }) })}
               </div>
             </>
           )}
