@@ -10,7 +10,7 @@ import {
   GoogleAuthProvider, createUserWithEmailAndPassword, sendPasswordResetEmail,
   signInWithEmailAndPassword, signInWithPopup, updateProfile,
 } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import { auth, hasRealFirebaseConfig } from '../../lib/firebase';
 import { homeFor, useAuth } from '../../auth/AuthProvider';
 import { Button } from '../../components/ui/Button';
 
@@ -34,7 +34,7 @@ const errorKey = (e: unknown) => {
 
 export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const { t } = useTranslation('auth');
-  const { me } = useAuth();
+  const { me, signInDemo } = useAuth();
   const from = (useLocation().state as { from?: string } | null)?.from;
   const isRegister = mode === 'register';
   const {
@@ -51,6 +51,11 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
   const msg = (k?: string) => (k ? t(k) : undefined);
 
   const submit = handleSubmit(async (v) => {
+    if (!hasRealFirebaseConfig) {
+      signInDemo('citizen', v.name || v.email.split('@')[0], v.email);
+      toast.success('Signed in');
+      return;
+    }
     try {
       if (isRegister) {
         const c = await createUserWithEmailAndPassword(auth, v.email, v.password);
@@ -62,7 +67,14 @@ export function AuthPage({ mode }: { mode: 'login' | 'register' }) {
     } catch (e) { fail(e); }
   });
 
-  const google = async () => { try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { fail(e); } };
+  const google = async () => {
+    if (!hasRealFirebaseConfig) {
+      signInDemo('citizen', 'Google Citizen', 'citizen@gmail.com');
+      toast.success('Signed in (local preview — add Firebase web keys in .env.local for live Google OAuth)');
+      return;
+    }
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { fail(e); }
+  };
 
   const forgot = async () => {
     if (!(await trigger('email'))) return;
