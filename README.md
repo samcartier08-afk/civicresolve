@@ -116,23 +116,5 @@ Open **[http://localhost:3000](http://localhost:3000)** (Citizen App) or **[http
 
 ---
 
-## Deployment
 
-### Google Cloud Run
-```bash
-gcloud run deploy civicresolve \
-  --source . \
-  --region asia-south1 \
-  --allow-unauthenticated \
-  --set-env-vars GEMINI_API_KEY="YOUR_KEY",NEXT_PUBLIC_FIREBASE_API_KEY="...",NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="...",NEXT_PUBLIC_FIREBASE_PROJECT_ID="...",NEXT_PUBLIC_FIREBASE_APP_ID="..."
-```
 
-### Vercel
-1. Import [samcartier08-afk/civicresolve](https://github.com/samcartier08-afk/civicresolve) at [vercel.com/new](https://vercel.com/new).
-2. Add `GEMINI_API_KEY` and the 4 `NEXT_PUBLIC_FIREBASE_*` keys under **Environment Variables**.
-3. Deploy and add your live domain under **Firebase Console → Authentication → Settings → Authorized domains**.
-
----
-
-## Submission Summary (Hack2Skill Requirement 4/4)
-> **CivicResolve** is an AI-powered civic issue reporting and municipal incident-clustering platform built with Next.js, TypeScript, Google Gemini (`@google/genai`), Firebase Authentication, and Google Cloud Run. Citizens report local infrastructure issues in 3 simple steps with photos, GPS/landmark, voice input, and multilingual English/Tamil/Hindi support—without needing to know municipal department names. Using our **IGMER (Ingest-First Geospatial Multimodal Entity Resolution)** engine, every report is persisted reliably before Gemini classifies urgency, routes departments, and clusters duplicate citizen reports into one tracked master incident. Dedicated key-protected Department and Admin portals enable real-time triage, status updates, resolution photo evidence, and live workload analytics.
