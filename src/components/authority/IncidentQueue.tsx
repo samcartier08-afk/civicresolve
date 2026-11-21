@@ -41,8 +41,9 @@ export function IncidentQueue({ incidents, loading, error, onRetry, onOpen, onEn
   }, [setPalette]);
 
   const age = (h: number) => {
+    const safeH = Number.isFinite(h) ? Math.max(0, Math.round(h)) : 0;
     const rtf = new Intl.RelativeTimeFormat(i18n.language, { numeric: 'auto' });
-    return h < 24 ? rtf.format(-h, 'hour') : rtf.format(-Math.round(h / 24), 'day');
+    return safeH < 24 ? rtf.format(-safeH, 'hour') : rtf.format(-Math.round(safeH / 24), 'day');
   };
 
   if (loading) return <ListSkeleton />;

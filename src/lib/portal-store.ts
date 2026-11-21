@@ -2,6 +2,7 @@ import type { CivicIssue, IssuePriority, IssueStatus, MunicipalDepartment } from
 import type { PriorityKey, StatusKey } from "@/components/ui/StatusPill";
 import type { IncidentRow } from "@/components/authority/IncidentQueue";
 import type { NearbyRow, ReportRow } from "./reports";
+import { verifyStaffToken } from "./staff-auth";
 
 export interface IncidentDetailRow extends IncidentRow {
   description: string;
@@ -140,11 +141,18 @@ export interface RequestActor {
 }
 
 export function extractRequestActor(req: Request): RequestActor {
-  const roleHeader = (req.headers.get("x-demo-role") || "").toLowerCase();
-  const uidHeader = req.headers.get("x-demo-uid")?.trim();
-  const nameHeader = req.headers.get("x-demo-name")?.trim();
+  // 1. Check signed Staff Portal token first (for Department / Admin portal sessions)
+  const staffToken = req.headers.get("x-staff-token")?.trim();
+  const verifiedStaff = verifyStaffToken(staffToken);
+  if (verifiedStaff) {
+    return {
+      uid: verifiedStaff.uid,
+      role: verifiedStaff.role,
+      name: verifiedStaff.name,
+    };
+  }
 
-  // If a real Firebase JWT is sent, decode payload sub/uid/name safely (signature verified in production Cloud Run)
+  // 2. Check Firebase Bearer ID token for authenticated citizens
   const authHeader = req.headers.get("authorization") || "";
   if (authHeader.startsWith("Bearer ")) {
     const token = authHeader.slice(7).trim();
@@ -154,7 +162,7 @@ export function extractRequestActor(req: Request): RequestActor {
         const payload = JSON.parse(
           Buffer.from(parts[1], "base64url").toString("utf-8")
         ) as Record<string, unknown>;
-        const uid = String(payload.user_id || payload.sub || uidHeader || "citizen-default");
+        const uid = String(payload.user_id || payload.sub || "citizen-default");
         const email = typeof payload.email === "string" ? payload.email : "";
         const name =
           typeof payload.name === "string"
@@ -162,29 +170,23 @@ export function extractRequestActor(req: Request): RequestActor {
             : email
               ? email.split("@")[0]
               : "Citizen";
-        const claimRole = String(payload.role || roleHeader || "citizen");
+        const claimRole = String(payload.role || "citizen");
         const role =
           claimRole === "admin" || claimRole === "authority" ? claimRole : "citizen";
         return { uid, role, name };
       } catch {
-        // Fall through to demo headers
+        // Fall through
       }
     }
   }
 
-  const role: RequestActor["role"] =
-    roleHeader === "admin" || roleHeader === "authority" ? roleHeader : "citizen";
+  const uidHeader = req.headers.get("x-demo-uid")?.trim();
+  const nameHeader = req.headers.get("x-demo-name")?.trim();
 
   return {
     uid: uidHeader || "local-citizen",
-    role,
-    name:
-      nameHeader ||
-      (role === "admin"
-        ? "Municipal Admin"
-        : role === "authority"
-          ? "Department Officer"
-          : "Citizen"),
+    role: "citizen",
+    name: nameHeader || "Citizen",
   };
 }
 

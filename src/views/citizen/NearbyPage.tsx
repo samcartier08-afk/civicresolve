@@ -16,6 +16,10 @@ export function NearbyPage() {
   const q = useNearby(pos);
 
   const locate = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error(t('nearby.geoError'));
+      return;
+    }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
       (p) => { setPos({ lat: p.coords.latitude, lng: p.coords.longitude }); setLocating(false); },

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MemoryRouter, useRoutes } from "react-router-dom";
+import { BrowserRouter, useNavigate, useRoutes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { initI18nSync } from "@/i18n";
 import { AuthProvider } from "@/auth/AuthProvider";
@@ -22,6 +22,21 @@ const queryClient = new QueryClient({
     queries: { staleTime: 30_000, retry: 1 },
   },
 });
+
+function StaffShortcutListener() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        navigate("/staff-login");
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [navigate]);
+  return null;
+}
 
 function AppRoutes() {
   return useRoutes([
@@ -45,7 +60,7 @@ function AppRoutes() {
   ]);
 }
 
-export default function Page() {
+export default function CatchAllPage() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
@@ -53,9 +68,10 @@ export default function Page() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <MemoryRouter initialEntries={["/"]}>
+        <BrowserRouter>
+          <StaffShortcutListener />
           <AppRoutes />
-        </MemoryRouter>
+        </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
   );

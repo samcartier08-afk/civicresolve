@@ -68,7 +68,11 @@ export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions 
   const [trackingId, setTrackingId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
-  const key = useRef(crypto.randomUUID());
+  const key = useRef(
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `rpt-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  );
 
   const {
     register, handleSubmit, setValue, getValues, watch, trigger,
@@ -99,7 +103,11 @@ export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions 
     setValue('images', next, { shouldValidate: true });
   };
 
-  const locate = () =>
+  const locate = () => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      toast.error(t('errors.geo'));
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
       (p) => {
         setValue('lat', p.coords.latitude, { shouldValidate: true });
@@ -108,6 +116,7 @@ export function ReportWizard({ onSubmit, mapSlot, photoExtras, photoSuggestions 
       () => toast.error(t('errors.geo')),
       { enableHighAccuracy: true, timeout: 10_000 },
     );
+  };
 
   const listen = () => {
     const Speech = getSpeech();

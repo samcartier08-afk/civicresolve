@@ -43,6 +43,7 @@ import {
   verifyRoleGuard,
 } from "../src/lib/security.ts";
 import { TRANSLATIONS } from "../src/lib/i18n.ts";
+import { authenticateStaffKey, verifyStaffToken } from "../src/lib/staff-auth.ts";
 import { getMongoDbUriInfo } from "../src/lib/mongodb.ts";
 import { GEMINI_MODELS, resolveModel } from "../src/lib/gemini.ts";
 
@@ -594,5 +595,20 @@ describe("Security Hardening Utilities", () => {
     assert.ok(TRANSLATIONS.en.reportForm.submitButton.length > 0);
     assert.ok(TRANSLATIONS.ta.reportForm.submitButton.length > 0);
     assert.ok(TRANSLATIONS.hi.reportForm.submitButton.length > 0);
+  });
+
+  it("authenticates Department and Admin portal keys and rejects invalid/tampered tokens", () => {
+    const dept = authenticateStaffKey("DEPT-CIVIC-2026");
+    assert.ok(dept);
+    assert.equal(dept.account.role, "authority");
+    assert.equal(verifyStaffToken(dept.token)?.role, "authority");
+
+    const admin = authenticateStaffKey("ADMIN-CIVIC-2026");
+    assert.ok(admin);
+    assert.equal(admin.account.role, "admin");
+    assert.equal(verifyStaffToken(admin.token)?.role, "admin");
+
+    assert.equal(authenticateStaffKey("WRONG-KEY"), null);
+    assert.equal(verifyStaffToken(`${admin.token}tampered`), null);
   });
 });

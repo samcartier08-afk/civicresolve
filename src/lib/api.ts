@@ -14,15 +14,26 @@ export interface IncidentDetailRow extends IncidentRow {
   resolutionPhotoUrl?: string;
 }
 
+export function getStaffTokenHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = sessionStorage.getItem('civicresolve_staff_session');
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as { token?: string };
+    return parsed.token ? { 'x-staff-token': parsed.token } : {};
+  } catch {
+    return {};
+  }
+}
+
 export function getDemoSessionHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {};
   try {
     const raw = localStorage.getItem('civicresolve_demo_user');
     if (!raw) return {};
-    const parsed = JSON.parse(raw) as { uid?: string; role?: string; name?: string };
+    const parsed = JSON.parse(raw) as { uid?: string; name?: string };
     const headers: Record<string, string> = {};
     if (parsed.uid) headers['x-demo-uid'] = parsed.uid;
-    if (parsed.role) headers['x-demo-role'] = parsed.role;
     if (parsed.name) headers['x-demo-name'] = parsed.name;
     return headers;
   } catch {
@@ -30,14 +41,18 @@ export function getDemoSessionHeaders(): Record<string, string> {
   }
 }
 
-/** Authenticated fetch: attaches Firebase ID token (or local session headers when Firebase config is absent). */
+/** Authenticated fetch: attaches Staff Token (for staff portals) or Firebase ID token (for citizens). */
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const token = await auth.currentUser?.getIdToken().catch(() => undefined);
-  const demoHeaders = token ? {} : getDemoSessionHeaders();
+  const staffHeaders = getStaffTokenHeader();
+  const hasStaff = Object.keys(staffHeaders).length > 0;
+  const token = hasStaff ? undefined : await auth.currentUser?.getIdToken().catch(() => undefined);
+  const demoHeaders = hasStaff || token ? {} : getDemoSessionHeaders();
+
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...staffHeaders,
       ...(token ? { Authorization: `Bearer ${token}` } : demoHeaders),
       ...init.headers,
     },

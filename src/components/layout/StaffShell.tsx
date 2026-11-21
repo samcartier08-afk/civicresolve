@@ -1,5 +1,5 @@
 "use client";
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../auth/AuthProvider';
@@ -13,6 +13,12 @@ export function StaffShell({ title, nav }: { title: string; nav: StaffNavItem[] 
   const { t } = useTranslation();
   const { t: tp } = useTranslation('portal');
   const { me, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/staff-login', { replace: true });
+  };
   return (
     <>
       <a href="#main" className="sr-only rounded-lg bg-white px-4 py-2 focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50">{t('nav.skip')}</a>
@@ -31,7 +37,7 @@ export function StaffShell({ title, nav }: { title: string; nav: StaffNavItem[] 
             </ul>
           </nav>
           <span className="text-sm text-[var(--ink-2)]">{me?.name}</span>
-          <Button intent="secondary" onClick={() => void signOut()}>{tp('signOut')}</Button>
+          <Button intent="secondary" onClick={() => void handleSignOut()}>{tp('signOut')}</Button>
         </div>
       </header>
       <main id="main" tabIndex={-1} className="mx-auto max-w-6xl px-4 py-6 outline-none"><Outlet /></main>

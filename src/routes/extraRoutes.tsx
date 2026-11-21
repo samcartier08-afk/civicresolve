@@ -10,6 +10,11 @@ import { Skeleton } from '../components/ui/States';
 const AuthPage = lazy(() =>
   import('../views/auth/AuthPage').then((m) => ({ default: m.AuthPage }))
 );
+const StaffPortalLoginPage = lazy(() =>
+  import('../views/auth/StaffPortalLoginPage').then((m) => ({
+    default: m.StaffPortalLoginPage,
+  }))
+);
 const IncidentsPage = lazy(() =>
   import('../views/staff/IncidentsPage').then((m) => ({ default: m.IncidentsPage }))
 );
@@ -45,6 +50,7 @@ function AdminLayout() {
 export const extraRoutes: RouteObject[] = [
   { path: '/login', element: <LazyWrap><AuthPage mode="login" /></LazyWrap> },
   { path: '/register', element: <LazyWrap><AuthPage mode="register" /></LazyWrap> },
+  { path: '/staff-login', element: <LazyWrap><StaffPortalLoginPage /></LazyWrap> },
   {
     element: <RequireRole roles={['authority', 'admin']} />,
     children: [

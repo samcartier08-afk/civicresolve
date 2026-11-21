@@ -21,9 +21,10 @@ export function RequireRole({ roles }: { roles: Role[] }) {
   const { user, me, loading, error, retry } = useAuth();
   const { t } = useTranslation('auth');
   const loc = useLocation();
+  const isStaffRoute = roles.includes('authority') || roles.includes('admin');
   if (loading) return <Pending />;
-  if (!user) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
+  if (!user) return <Navigate to={isStaffRoute ? '/staff-login' : '/login'} replace state={{ from: loc.pathname }} />;
   if (error || !me) return <ErrorState title={t('errors.profileTitle')} hint={t('errors.profile')} onRetry={retry} />;
-  if (!roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />;
+  if (!roles.includes(me.role)) return <Navigate to={isStaffRoute ? '/staff-login' : homeFor(me.role)} replace />;
   return <Outlet />;
 }
