@@ -89,6 +89,14 @@ export function ReportIssueTab({
     aiModel: string;
   } | null>(null);
   const [submittedIssue, setSubmittedIssue] = useState<CivicIssue | null>(null);
+  const [igmerReceipt, setIgmerReceipt] = useState<{
+    reportId: string;
+    outboxEventId: string;
+    masterIncidentId: string | null;
+    matchingOutcome: string;
+    matchingScore: number | null;
+    supportingReportCount: number;
+  } | null>(null);
 
   function applySample(sample: (typeof SAMPLE_REPORTS)[number]) {
     setTitle(sample.title);
@@ -222,6 +230,9 @@ export function ReportIssueTab({
 
       const created: CivicIssue = data.issue;
       setSubmittedIssue(created);
+      if (data.igmer) {
+        setIgmerReceipt(data.igmer);
+      }
       setTriagePreview({
         triage: {
           category: created.category,
@@ -517,6 +528,20 @@ export function ReportIssueTab({
               Routed to <strong>{submittedIssue.recommendedDepartment}</strong> with{" "}
               <strong>{submittedIssue.priority}</strong> priority.
             </p>
+            {igmerReceipt && (
+              <div className="mt-2 rounded-lg border border-emerald-400/30 bg-slate-950/60 p-2.5 text-[11px] text-emerald-100">
+                <p>
+                  <strong>IGMER Outbox Receipt:</strong> {igmerReceipt.reportId} (Outbox{" "}
+                  {igmerReceipt.outboxEventId})
+                </p>
+                <p className="mt-0.5">
+                  <strong>Entity Resolution:</strong> {igmerReceipt.matchingOutcome} → Master
+                  Incident <strong>{igmerReceipt.masterIncidentId}</strong> (
+                  {igmerReceipt.supportingReportCount} supporting report
+                  {igmerReceipt.supportingReportCount === 1 ? "" : "s"})
+                </p>
+              </div>
+            )}
             <button
               type="button"
               onClick={() => onNavigateToTracker(submittedIssue.id)}

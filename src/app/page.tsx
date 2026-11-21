@@ -5,6 +5,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ClipboardList,
+  Cpu,
   FilePlus2,
   Landmark,
   MessageSquareText,
@@ -17,8 +18,9 @@ import { ReportIssueTab } from "@/components/ReportIssueTab";
 import { TrackingDashboardTab } from "@/components/TrackingDashboardTab";
 import { AdminDashboardTab } from "@/components/AdminDashboardTab";
 import { CivicAssistantTab } from "@/components/CivicAssistantTab";
+import { IgmerLabTab } from "@/components/IgmerLabTab";
 
-type TabId = "report" | "track" | "admin" | "assistant";
+type TabId = "report" | "igmer" | "track" | "admin" | "assistant";
 
 type HealthState = {
   apiKeyConfigured: boolean;
@@ -83,9 +85,10 @@ export default function CivicResolveApp() {
     id: TabId;
     label: string;
     icon: typeof FilePlus2;
-    badge?: number;
+    badge?: number | string;
   }> = [
     { id: "report", label: "Report Issue", icon: FilePlus2 },
+    { id: "igmer", label: "IGMER Clustering & Load Lab", icon: Cpu, badge: "IGMER" },
     { id: "track", label: "Issue Tracker", icon: ClipboardList, badge: stats.total },
     {
       id: "admin",
@@ -111,7 +114,7 @@ export default function CivicResolveApp() {
           <div>
             <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-200">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-              Powered by Google Gemini & Google Cloud Run
+              IGMER Algorithm · Ingest-First Geospatial Multimodal Entity Resolution
             </div>
             <div className="flex items-center gap-2.5">
               <Landmark className="h-7 w-7 text-indigo-400" aria-hidden="true" />
@@ -120,8 +123,7 @@ export default function CivicResolveApp() {
               </h1>
             </div>
             <p className="mt-1 max-w-2xl text-sm text-slate-300">
-              AI-powered civic issue reporting, automatic department routing, urgency prioritization,
-              and transparent resolution tracking.
+              Citizen-first ingest architecture with Transactional Outbox, PostGIS + pgvector multimodal incident clustering, advisory-locked concurrency, and Google Gemini triage.
             </p>
           </div>
 
@@ -143,7 +145,7 @@ export default function CivicResolveApp() {
               ) : (
                 <>
                   <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
-                  Fallback Mode (Set GEMINI_API_KEY)
+                  Ingest-First Resilient Mode (Set GEMINI_API_KEY)
                 </>
               )}
             </div>
@@ -177,7 +179,7 @@ export default function CivicResolveApp() {
                 >
                   <Icon className="h-4 w-4" aria-hidden="true" />
                   <span>{tab.label}</span>
-                  {typeof tab.badge === "number" && (
+                  {tab.badge !== undefined && (
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
                         selected
@@ -205,6 +207,12 @@ export default function CivicResolveApp() {
                   setActiveTab("track");
                 }}
               />
+            </div>
+          )}
+
+          {activeTab === "igmer" && (
+            <div id="panel-igmer" role="tabpanel" aria-labelledby="tab-igmer">
+              <IgmerLabTab />
             </div>
           )}
 
@@ -242,7 +250,7 @@ export default function CivicResolveApp() {
         </main>
 
         <footer className="mt-10 border-t border-white/10 pt-5 text-center text-xs text-slate-400">
-          CivicResolve — Built with Google Gemini (`@google/genai`) & Next.js on Google Cloud Run
+          CivicResolve — IGMER (Ingest-First Geospatial Multimodal Entity Resolution) · Google Gemini & Cloud Run
         </footer>
       </div>
     </>

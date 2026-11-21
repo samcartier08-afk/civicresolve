@@ -48,7 +48,10 @@ export function fallbackClassifyIssue(input: TriageInput): AiTriageResult {
     input.userCategory && input.userCategory !== "Auto" ? input.userCategory : "Other";
   let department: MunicipalDepartment = "General Municipal Grievance Cell";
 
-  if (/streetlight|lamp|light|dark|electric|wire|pole|transformer|power/.test(issueText)) {
+  if (/pothole|crater|asphalt|sinkhole|road condition|damaged road/.test(issueText)) {
+    category = "Roads & Potholes";
+    department = "Public Works & Roads Department (PWD)";
+  } else if (/streetlight|lamp|light|dark|electric|wire|pole|transformer|power/.test(issueText)) {
     category = "Streetlights & Electricity";
     department = "Electricity & Streetlighting Board";
   } else if (/water|pipe|leak|drain|flood|sewer|manhole|gutter|stagnant/.test(issueText)) {
@@ -57,7 +60,7 @@ export function fallbackClassifyIssue(input: TriageInput): AiTriageResult {
   } else if (/garbage|trash|waste|dump|bin|sanitation|smell|litter|sewage odor/.test(issueText)) {
     category = "Waste & Sanitation";
     department = "Municipal Solid Waste & Sanitation";
-  } else if (/pothole|crater|asphalt|crack|footpath|bridge|flyover|sinkhole|road condition|damaged road/.test(issueText)) {
+  } else if (/crack|footpath|bridge|flyover/.test(issueText)) {
     category = "Roads & Potholes";
     department = "Public Works & Roads Department (PWD)";
   } else if (/tree|park|branch|garden|fallen tree|green/.test(issueText)) {

@@ -7,6 +7,7 @@ import {
   type IssuePriority,
   type IssueStatus,
 } from "@/lib/civic-schemas";
+import { ingestCitizenReport, processOutboxEvent } from "@/lib/igmer-engine";
 import { computeIssueStats, createIssue, listIssues } from "@/lib/issue-store";
 import {
   checkRateLimit,
@@ -125,7 +126,39 @@ export async function POST(req: Request) {
     });
 
     const stats = computeIssueStats();
-    return NextResponse.json({ issue, stats }, { status: 201 });
+
+    // Priority 1 & 2: Record through IGMER Ingest-First + Transactional Outbox + Entity Resolution
+    const igmerIngested = ingestCitizenReport({
+      idempotencyKey: req.headers.get("Idempotency-Key") || undefined,
+      reporterName: reporterName?.trim() || "Anonymous Citizen",
+      title,
+      description,
+      location,
+      userCategory: userCategory ?? "Auto",
+      imageDataUrl:
+        imageDataUrl && imageDataUrl.startsWith("data:image/")
+          ? imageDataUrl
+          : undefined,
+    });
+    const igmerProcessed = await processOutboxEvent(igmerIngested.outboxEvent.eventId);
+
+    return NextResponse.json(
+      {
+        issue,
+        stats,
+        igmer: {
+          reportId: igmerProcessed.report.reportId,
+          outboxEventId: igmerProcessed.outboxEvent.eventId,
+          masterIncidentId: igmerProcessed.masterIncident?.incidentId ?? null,
+          matchingOutcome: igmerProcessed.report.matchingOutcome,
+          matchingScore: igmerProcessed.report.matchingScore,
+          similarityBreakdown: igmerProcessed.report.similarityBreakdown,
+          supportingReportCount:
+            igmerProcessed.masterIncident?.supportingReportCount ?? 1,
+        },
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[POST /api/issues] Error:", err);
     const { message, status } = sanitizeApiError(err);
