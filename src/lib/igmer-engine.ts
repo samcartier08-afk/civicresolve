@@ -18,6 +18,7 @@ import {
   type MunicipalDepartment,
 } from "./civic-schemas.ts";
 import { classifyCivicIssue, fallbackClassifyIssue } from "./civic-ai.ts";
+import { getMongoDb } from "./mongodb.ts";
 
 export interface IgmerThresholds {
   highConfidence: number; // default 0.75 -> AUTO_LINKED
@@ -747,6 +748,23 @@ export function ingestCitizenReport(input: IngestReportInput): {
   reportIdByIdempotencyKey.set(idempotencyKey, reportId);
   outboxById.set(eventId, outboxEvent);
 
+  // Asynchronously persist to MongoDB if connected
+  void getMongoDb().then((db) => {
+    if (!db) return;
+    void Promise.allSettled([
+      db.collection("citizen_reports").updateOne(
+        { reportId },
+        { $set: report },
+        { upsert: true }
+      ),
+      db.collection("transactional_outbox").updateOne(
+        { eventId },
+        { $set: outboxEvent },
+        { upsert: true }
+      ),
+    ]);
+  });
+
   return { report, outboxEvent, deduplicated: false };
 }
 
@@ -957,6 +975,25 @@ export async function processOutboxEvent(
       ? "Gemini unavailable during initial pass; incident clustered via fallback, queued for AI enrichment retry."
       : null;
   event.updatedAt = new Date().toISOString();
+
+  // Asynchronously sync updated report, event, and master incident to MongoDB
+  void getMongoDb().then((db) => {
+    if (!db) return;
+    const ops: Promise<unknown>[] = [
+      db.collection("citizen_reports").updateOne({ reportId: report.reportId }, { $set: report }, { upsert: true }),
+      db.collection("transactional_outbox").updateOne({ eventId: event.eventId }, { $set: event }, { upsert: true }),
+    ];
+    if (masterIncident) {
+      ops.push(
+        db.collection("master_incidents").updateOne(
+          { incidentId: masterIncident.incidentId },
+          { $set: masterIncident },
+          { upsert: true }
+        )
+      );
+    }
+    void Promise.allSettled(ops);
+  });
 
   return { outboxEvent: event, report, masterIncident };
 }

@@ -39,6 +39,7 @@ import {
   resetRateLimitStore,
   sanitizeApiError,
 } from "../src/lib/security.ts";
+import { getMongoDbUriInfo } from "../src/lib/mongodb.ts";
 import { GEMINI_MODELS, resolveModel } from "../src/lib/gemini.ts";
 
 describe("Gemini Model Configuration", () => {
@@ -515,5 +516,11 @@ describe("Security Hardening Utilities", () => {
     assert.equal(escapeCsvCell("=CMD|' /C calc'!A0"), "\"'=CMD|' /C calc'!A0\"");
     assert.equal(escapeCsvCell("+1234"), "\"'+1234\"");
     assert.equal(escapeCsvCell("Normal, \"quoted\" text"), "\"Normal, \"\"quoted\"\" text\"");
+  });
+
+  it("exposes MongoDB connection telemetry without throwing", () => {
+    const info = getMongoDbUriInfo();
+    assert.ok(typeof info.connected === "boolean");
+    assert.ok(typeof info.uri === "string");
   });
 });
