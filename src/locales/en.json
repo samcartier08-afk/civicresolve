@@ -1,0 +1,45 @@
+{
+  "nav": { "label": "Main", "skip": "Skip to content", "home": "Home", "nearby": "Nearby", "report": "Report", "myReports": "My reports", "profile": "Profile" },
+  "state": { "loading": "Loading", "retry": "Try again" },
+  "status": {
+    "reported": "Received", "ai_analyzed": "Checked by AI", "under_review": "Under review", "awaiting_info": "Needs more info",
+    "assigned": "Assigned", "accepted": "Accepted", "in_progress": "Work started", "escalated": "Escalated",
+    "reopened": "Reopened", "rejected": "Not accepted", "resolved": "Fixed", "closed": "Closed"
+  },
+  "priority": { "critical": "Critical", "high": "High", "medium": "Medium", "low": "Low" },
+  "report": {
+    "stepOf": "Step {{current}} of {{total}}", "step1": "What happened?", "step2": "Where is it?", "step3": "Check and send",
+    "describe": "Describe the problem", "describeHint": "One or two sentences is enough. Write in any language.",
+    "photos": "Photos", "addPhoto": "Add a photo", "photoHint": "Up to 4 photos. JPG, PNG or WebP, 5 MB each.",
+    "photoAlt": "Photo {{n}} of the problem", "removePhoto": "Remove photo {{n}}",
+    "speak": "Speak instead", "listening": "Listening",
+    "useLocation": "Use my location", "locationConsent": "We use your location only to place this report on the map.",
+    "locationSet": "Location added", "landmark": "Nearby landmark", "landmarkHint": "For example, the college gate or bus stop",
+    "anonymous": "Report without my name", "anonymousHint": "You'll get a tracking link instead of a saved history.",
+    "next": "Continue", "back": "Back", "send": "Send report", "sending": "Sending",
+    "doneTitle": "We got your report", "doneBody": "Tracking ID {{id}}. We'll tell you when someone reviews it."
+  },
+  "errors": {
+    "descShort": "Tell us a little more. Use at least 10 characters.",
+    "needLocation": "Add your location or a nearby landmark so we can find the spot.",
+    "photoType": "That file isn't a JPG, PNG or WebP photo. Choose a different one.",
+    "photoSize": "That photo is over 5 MB. Choose a smaller one.",
+    "photoMax": "You can add up to 4 photos.",
+    "geo": "We couldn't get your location. Type a nearby landmark instead.",
+    "voice": "Voice input didn't work. Type your description instead.",
+    "submit": "We couldn't send your report. Your answers are still here. Check your connection and try again."
+  },
+  "queue": {
+    "search": "Search incidents", "searchHint": "Search by number, title or department",
+    "emptyTitle": "No incidents in this view", "emptyHint": "Change the filters or check back soon.",
+    "errorTitle": "We couldn't load incidents", "errorHint": "Check your connection, then try again.",
+    "reports_one": "{{count}} report", "reports_other": "{{count}} reports"
+  },
+  "admin": {
+    "overview": "Overview", "reports": "Citizen reports", "unique": "Unique incidents", "uniqueHint": "Duplicate reports merged",
+    "open": "Open", "critical": "Critical", "inProgress": "In progress", "resolved": "Resolved",
+    "workload": "Open work by department", "department": "Department",
+    "errorTitle": "We couldn't load the overview", "errorHint": "Check your connection, then try again.",
+    "emptyTitle": "No data for these filters", "emptyHint": "Widen the date range or clear a filter."
+  }
+}

@@ -1,0 +1,18 @@
+:root {
+  --bg: #f7f7f4; --surface: #fff; --ink: #0f1b2d; --ink-2: #475467; --line: #e3e5e8;
+  --ok: #15803d; --ok-bg: #e8f5ec;
+  --warn: #9a4a07; --warn-bg: #fdf1dc;
+  --crit: #b91c1c; --crit-bg: #fdecec;
+  --ai: #4338ca; --ai-bg: #eceefd;
+  --radius: 14px;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans Tamil", "Noto Sans Devanagari", Roboto, sans-serif;
+  color-scheme: light;
+}
+body { background: var(--bg); color: var(--ink); line-height: 1.5; letter-spacing: -0.003em; -webkit-tap-highlight-color: transparent; }
+h1, h2, h3 { letter-spacing: -0.02em; line-height: 1.2; }
+:focus-visible { outline: 2px solid var(--ai); outline-offset: 2px; }
+button, a, input, textarea, select { touch-action: manipulation; }
+input, textarea, select { font-size: 16px; } /* stops iOS zoom on focus */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
