@@ -142,23 +142,28 @@ export async function POST(req: Request) {
       isSynthetic: false,
     });
 
+    const reportRow = {
+      id: igmerProcessed.report.reportId,
+      trackingId: created.id,
+      description: created.description,
+      status: toSiteStatus(created.status),
+      createdAt: created.createdAt,
+      incidentNumber: created.id,
+    };
+
     // Store in this user's own My Reports list (unless anonymous)
     if (!anonymous) {
-      addMyReportForUid(actor.uid, {
-        id: igmerProcessed.report.reportId,
-        trackingId: created.id,
-        description: created.description,
-        status: toSiteStatus(created.status),
-        createdAt: created.createdAt,
-        incidentNumber: created.id,
-      });
+      addMyReportForUid(actor.uid, reportRow);
     }
 
     if (idempotencyKey) {
       saveIdempotentReceipt(idempotencyKey, created.id);
     }
 
-    return NextResponse.json({ trackingId: created.id }, { status: 201 });
+    return NextResponse.json(
+      { trackingId: created.id, report: anonymous ? null : reportRow },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[POST /api/reports] Error:", err);
     const { message, status } = sanitizeApiError(err);
